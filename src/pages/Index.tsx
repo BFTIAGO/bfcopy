@@ -71,7 +71,7 @@ const daySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["gameName"],
-          message: "Nome do jogo é obrigatório em ‘Deposite, jogue e ganhe’.",
+          message: "Nome do jogo é obrigatório em 'Deposite, jogue e ganhe'.",
         });
       }
       const expected = d.buttonCount ?? 0;
@@ -211,6 +211,17 @@ function ensureButtonsLen(buttons: Array<{ text?: string }>, n: number) {
   const next = [...buttons];
   while (next.length < n) next.push({});
   return next.slice(0, n);
+}
+
+function dayHasContent(d: {
+  gameName?: string;
+  freeMessage?: string;
+  buttons?: Array<{ text?: string }>;
+}) {
+  const game = (d.gameName ?? "").trim();
+  const free = (d.freeMessage ?? "").trim();
+  const anyBtn = (d.buttons ?? []).some((b) => (b.text ?? "").trim().length > 0);
+  return game.length > 0 || free.length > 0 || anyBtn;
 }
 
 const Index = () => {
@@ -628,6 +639,14 @@ const Index = () => {
                             });
                           }
 
+                          const prevDayIndex = dayIndex - 1;
+                          const prevDayValues =
+                            prevDayIndex >= 0
+                              ? form.getValues(`days.${prevDayIndex}`)
+                              : null;
+                          const canRepeatPrev =
+                            prevDayValues && dayHasContent(prevDayValues);
+
                           return (
                             <TabsContent
                               key={field.id}
@@ -676,6 +695,33 @@ const Index = () => {
                                   )}
                                 />
                               </div>
+
+                              {dayIndex > 0 && (
+                                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <p className="text-sm text-slate-600">
+                                    Precisa repetir a mesma oferta?
+                                  </p>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="h-10 rounded-2xl"
+                                    disabled={!canRepeatPrev}
+                                    onClick={() => {
+                                      if (!prevDayValues) return;
+                                      const cloned = JSON.parse(JSON.stringify(prevDayValues));
+                                      form.setValue(`days.${dayIndex}`, cloned, {
+                                        shouldDirty: true,
+                                        shouldValidate: true,
+                                      });
+                                      showSuccess(
+                                        `Oferta do Dia ${prevDayIndex + 1} repetida no Dia ${dayIndex + 1}.`,
+                                      );
+                                    }}
+                                  >
+                                    Repetir oferta do Dia {prevDayIndex + 1}
+                                  </Button>
+                                </div>
+                              )}
 
                               <div className="mt-6 space-y-5">
                                 {dayMode === "A" ? (
