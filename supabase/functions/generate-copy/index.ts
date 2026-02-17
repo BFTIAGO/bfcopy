@@ -163,6 +163,21 @@ serve(async (req) => {
       });
     }
 
+    const masterPrompt = (master?.prompt_instrucao ?? "").trim();
+    if (!masterPrompt) {
+      console.error("[generate-copy] Missing master prompt");
+      return new Response(
+        JSON.stringify({
+          error:
+            "Não é possível gerar: o guia mestre não está configurado (prompt_master.prompt_instrucao).",
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const { data: casinoRow, error: casinoErr } = await supabase
       .from("casino_prompts")
       .select(
@@ -188,6 +203,23 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const casinoTone = String(casinoRow.tom_voz ?? "").trim();
+    if (!casinoTone) {
+      console.error("[generate-copy] Missing casino tone", { casino: payload.casino });
+      return new Response(
+        JSON.stringify({
+          error:
+            "Não é possível gerar: tom de voz não configurado para esse cassino (casino_prompts.tom_voz).",
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const casinoInstruction = String(casinoRow.prompt_instrucao ?? "").trim();
 
     const refKeys = pickRefKey(payload);
     const references = refKeys
@@ -221,24 +253,27 @@ serve(async (req) => {
     const sazonal = payload.sazonal ?? {};
 
     const prompt = [
-      "Você é um redator CRM sênior. Escreva APENAS em Português do Brasil (PT-BR) nativo.",
-      "Não use inglês. Não explique. Não cite políticas. Não inclua comentários.",
-      "Siga o TOM DE VOZ do cassino e imite o FORMATO das referências fornecidas (estrutura/headers, estilo e densidade), mas sem copiar frases literalmente.",
-      "Evite promessas impossíveis e evite inventar valores específicos se não foram fornecidos. Se faltar um detalhe, escreva de forma genérica e segura.",
+      "Você é um redator CRM sênior.",
+      "Escreva APENAS em Português do Brasil (PT-BR) nativo.",
+      "Não use inglês. Não explique. Não inclua comentários.",
+      "A saída DEVE seguir fielmente o mesmo MODELO das referências (mesmas seções, labels, ordem, separadores e estilo).",
+      "Não copie frases literalmente: reescreva mantendo a estrutura.",
+      "Respeite o guia mestre e o tom de voz do cassino.",
+      "Evite inventar valores específicos se não foram fornecidos.",
       "",
       `CASINO: ${casinoRow.nome_casino}`,
-      `TOM_DE_VOZ: ${casinoRow.tom_voz}`,
+      `TOM_DE_VOZ: ${casinoTone}`,
       `TIER: ${payload.tier}`,
-      `FUNIL: ${payload.funnelType}${payload.reativacaoRegua ? ` (RÉGUA ${payload.reativacaoRegua})` : ""}`,
+      `FUNIL: ${payload.funnelType}${payload.reativacaoRegua ? ` (${payload.reativacaoRegua})` : ""}`,
       "",
-      "INSTRUÇÕES MASTER:",
-      (master?.prompt_instrucao ?? "").trim(),
+      "GUIA MESTRE (obrigatório):",
+      masterPrompt,
       "",
       "INSTRUÇÕES DO CASINO:",
-      String(casinoRow.prompt_instrucao ?? "").trim(),
+      casinoInstruction,
       "",
-      "REFERÊNCIAS DE FORMATO (use como espelho de estrutura; não copie texto):",
-      references.length ? references.join("\n\n---\n\n") : "(sem referências cadastradas para este funil)",
+      "REFERÊNCIAS (use como molde de formatação):",
+      references.join("\n\n---\n\n"),
       "",
       "ENTRADAS DO OPERADOR:",
       sazonalActive
@@ -263,37 +298,8 @@ serve(async (req) => {
             })
             .join("\n\n"),
       "",
-      "SAÍDA (obrigatório):",
-      sazonalActive
-        ? [
-            "CAMPANHA SAZONAL",
-            "EMAIL",
-            "ASSUNTO:",
-            "PREHEADER:",
-            "CORPO:",
-            "",
-            "PUSH:",
-            "",
-            "SMS:",
-            "",
-            "POPUP:",
-          ].join("\n")
-        : [
-            "DIA 1",
-            "EMAIL",
-            "ASSUNTO:",
-            "PREHEADER:",
-            "CORPO:",
-            "",
-            "PUSH:",
-            "",
-            "SMS:",
-            "",
-            "POPUP:",
-            "",
-            "DIA 2",
-            "(repita o mesmo bloco até DIA 5 apenas para os dias que foram preenchidos)",
-          ].join("\n"),
+      "SAÍDA:",
+      "Entregue somente a copy final no formato das referências.",
     ].join("\n");
 
     console.log("[generate-copy] Generating", {
