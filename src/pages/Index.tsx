@@ -884,8 +884,9 @@ const Index = () => {
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Gerar copy</p>
                       <p className="text-sm text-slate-600">
-                        A geração real (IA) será ligada na próxima etapa.
+                        Geração via IA (Gemini) usando guia mestre + tom de voz + referência do cassino.
                       </p>
+
                     </div>
                     <Button
                       type="submit"

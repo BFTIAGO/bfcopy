@@ -72,34 +72,83 @@ function casinoNameCandidates(v: string) {
 
 function normalizeDays(payload: Payload) {
   const days = payload.days ?? [];
-  return days
-    .map((d, i) => {
-      const gameName = (d.gameName ?? "").trim();
-      const freeMessage = (d.freeMessage ?? "").trim();
-      const buttons = (d.buttons ?? [])
-        .map((b) => (b.text ?? "").trim())
-        .filter(Boolean);
-      const active = gameName.length > 0 || freeMessage.length > 0 || buttons.length > 0;
-      if (!active) return null;
 
-      return {
-        day: i + 1,
-        type:
-          d.mode === "A"
-            ? "Deposite, jogue e ganhe"
-            : "Outro tipo de oferta",
-        gameName,
-        buttons,
-        freeMessage,
-      };
-    })
-    .filter(Boolean) as Array<{
+  const parsed = Array.from({ length: 5 }).map((_, i) => {
+    const d = days[i] ?? ({} as any);
+    const gameName = (d.gameName ?? "").trim();
+    const freeMessage = (d.freeMessage ?? "").trim();
+    const buttons = (d.buttons ?? [])
+      .map((b: any) => (b.text ?? "").trim())
+      .filter(Boolean);
+
+    const active = gameName.length > 0 || freeMessage.length > 0 || buttons.length > 0;
+
+    return {
+      day: i + 1,
+      type:
+        d.mode === "A" ? "Deposite, jogue e ganhe" : "Outro tipo de oferta",
+      gameName,
+      buttons,
+      freeMessage,
+      active,
+    };
+  });
+
+  // Para garantir funil completo de 5 dias:
+  // se um dia estiver vazio, ele herda a oferta do último dia preenchido (fallback para Dia 1).
+  let lastActiveIndex = parsed.findIndex((d) => d.active);
+  if (lastActiveIndex === -1) {
+    // sem nenhum dia preenchido — o front deveria bloquear, mas mantemos seguro
+    return parsed.map((d) => ({ ...d, repeatOfDay: 1 }));
+  }
+
+  const out: Array<{
     day: number;
     type: string;
     gameName: string;
     buttons: string[];
     freeMessage: string;
-  }>;
+    repeatOfDay?: number;
+  }> = [];
+
+  let lastFilled = parsed[lastActiveIndex];
+  let lastFilledDay = parsed[lastActiveIndex].day;
+
+  for (let i = 0; i < parsed.length; i++) {
+    const cur = parsed[i];
+    if (cur.active) {
+      out.push({
+        day: cur.day,
+        type: cur.type,
+        gameName: cur.gameName,
+        buttons: cur.buttons,
+        freeMessage: cur.freeMessage,
+      });
+      lastFilled = cur;
+      lastFilledDay = cur.day;
+      continue;
+    }
+
+    // dia vazio -> repete último preenchido (ou dia 1 se nenhum anterior)
+    const fallback = i === 0 ? parsed[0] : lastFilled;
+    const fallbackDay = i === 0 ? 1 : lastFilledDay;
+
+    out.push({
+      day: cur.day,
+      type: fallback.type,
+      gameName: fallback.gameName,
+      buttons: fallback.buttons,
+      freeMessage: fallback.freeMessage,
+      repeatOfDay: fallbackDay,
+    });
+  }
+
+  return out;
+}
+
+function hasFiveDays(text: string) {
+  const t = (text ?? "").toLowerCase();
+  return [1, 2, 3, 4, 5].every((n) => new RegExp(`\\bdia\\s*${n}\\b`, "i").test(t));
 }
 
 async function callGeminiFlash(prompt: string) {
@@ -374,12 +423,14 @@ serve(async (req) => {
       "Você é um redator CRM sênior.",
       "Escreva APENAS em Português do Brasil (PT-BR) nativo.",
       "NÃO use emojis.",
+      "NÃO use linguagem vulgar.",
       "NÃO inclua diagnóstico, explicações, metacomunicação ou títulos do tipo 'Diagnóstico'/'Copy Final'.",
       "A saída DEVE seguir fielmente o mesmo MODELO das referências (mesmas seções, labels, ordem, separadores e estilo).",
       "Não copie frases literalmente: reescreva mantendo a estrutura.",
       "Respeite o guia mestre e o tom de voz do cassino.",
       "Evite inventar valores específicos se não foram fornecidos.",
       "Garanta que o texto fique completo (não pare no meio de uma frase/linha).",
+      "Se este for um funil de 5 dias, entregue obrigatoriamente DIA 1, DIA 2, DIA 3, DIA 4 e DIA 5.",
       "",
       `CASINO: ${casinoRow.nome_casino}`,
       `TOM_DE_VOZ: ${casinoTone}`,
@@ -409,7 +460,9 @@ serve(async (req) => {
         : days
             .map((d) => {
               const parts = [
-                `DIA ${d.day} — TIPO: ${d.type}`,
+                `DIA ${d.day}`,
+                d.repeatOfDay ? `REPETIR_OFERTA_DO_DIA: ${d.repeatOfDay}` : "",
+                `TIPO: ${d.type}`,
                 d.gameName ? `JOGO: ${d.gameName}` : "",
                 d.buttons?.length ? `BOTÕES/CTAs: ${d.buttons.join(" | ")}` : "",
                 d.freeMessage ? `MENSAGEM_BASE: ${d.freeMessage}` : "",
@@ -446,9 +499,11 @@ serve(async (req) => {
       "Regras:",
       "- PT-BR nativo.",
       "- Não use emojis.",
+      "- Não use linguagem vulgar.",
       "- Não escreva diagnósticos, comentários ou explicações.",
       "- Preserve exatamente a estrutura da referência: mesmas seções, mesma ordem, mesmos labels e separadores.",
       "- Se algo estiver faltando, complete.",
+      "- Para funil de 5 dias, garantir DIA 1..DIA 5.",
       "- Entregue SOMENTE a copy final.",
       "",
       "REFERÊNCIA:",
@@ -459,7 +514,49 @@ serve(async (req) => {
     ].join("\n");
 
     const gen2 = await callGeminiFlash(reviewPrompt);
-    const finalText = stripEmojisAndMeta((gen2.ok ? gen2.text : gen1.text) ?? "");
+    let finalText = stripEmojisAndMeta((gen2.ok ? gen2.text : gen1.text) ?? "");
+
+    // 3) Se ainda não vier 5 dias, pedir complemento (sem alterar o que já está certo)
+    if (!sazonalActive && !hasFiveDays(finalText)) {
+      console.warn("[generate-copy] Missing days in output, requesting completion", {
+        casino: payload.casino,
+        funnel: payload.funnelType,
+      });
+      const completionPrompt = [
+        "Você é um revisor de copy CRM extremamente rígido.",
+        "O texto abaixo está INCOMPLETO (faltam dias do funil).",
+        "Tarefa: entregar o funil COMPLETO de 5 dias (DIA 1..DIA 5) no exato molde da referência.",
+        "Regras:",
+        "- Não use emojis.",
+        "- Não escreva diagnósticos nem comentários.",
+        "- Preserve o que já está bom e complete o que falta.",
+        "- Entregue SOMENTE a copy final.",
+        "",
+        "REFERÊNCIA:",
+        references.join("\n\n---\n\n"),
+        "",
+        "TEXTO ATUAL:",
+        finalText,
+        "",
+        "ENTRADAS DO OPERADOR (5 dias):",
+        days
+          .map((d) => {
+            const parts = [
+              `DIA ${d.day}`,
+              d.repeatOfDay ? `REPETIR_OFERTA_DO_DIA: ${d.repeatOfDay}` : "",
+              `TIPO: ${d.type}`,
+              d.gameName ? `JOGO: ${d.gameName}` : "",
+              d.buttons?.length ? `BOTÕES/CTAs: ${d.buttons.join(" | ")}` : "",
+              d.freeMessage ? `MENSAGEM_BASE: ${d.freeMessage}` : "",
+            ].filter(Boolean);
+            return parts.join("\n");
+          })
+          .join("\n\n"),
+      ].join("\n");
+
+      const gen3 = await callGeminiFlash(completionPrompt);
+      if (gen3.ok) finalText = stripEmojisAndMeta(gen3.text);
+    }
 
     return new Response(JSON.stringify({ copyAll: finalText }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
