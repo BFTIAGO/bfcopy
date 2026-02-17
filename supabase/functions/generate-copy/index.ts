@@ -319,17 +319,44 @@ serve(async (req) => {
       .map((v) => String(v).trim());
 
     if (references.length === 0) {
+      const refDebug: Record<
+        string,
+        {
+          isNull: boolean;
+          length: number;
+          trimmedLength: number;
+          preview: string | null;
+        }
+      > = {};
+
+      for (const k of refKeys) {
+        const raw = (casinoRow as any)?.[k];
+        const str = typeof raw === "string" ? raw : "";
+        refDebug[k] = {
+          isNull: raw == null,
+          length: str.length,
+          trimmedLength: str.trim().length,
+          preview: str.trim().length ? str.trim().slice(0, 120) : null,
+        };
+      }
+
       console.warn("[generate-copy] Missing references for funnel", {
         casino: payload.casino,
+        matchedCasino: casinoRow?.nome_casino,
         funnel: payload.funnelType,
         reativacaoRegua: payload.reativacaoRegua,
         refKeys,
+        refDebug,
       });
+
       return new Response(
         JSON.stringify({
           error:
             "Não é possível gerar: falta referência cadastrada para esse cassino/funil (casino_prompts.ref_*).",
+          casino: payload.casino,
+          matchedCasino: casinoRow?.nome_casino,
           missingRefKeys: refKeys,
+          refDebug,
         }),
         {
           status: 400,

@@ -321,6 +321,16 @@ const Index = () => {
                 const list = parsed.availableCasinos.slice(0, 12).join(", ");
                 errMsg = `${errMsg}\nDisponíveis: ${list}${parsed.availableCasinos.length > 12 ? "…" : ""}`;
               }
+              if (parsed?.matchedCasino) {
+                errMsg = `${errMsg}\nCasado no banco: ${parsed.matchedCasino}`;
+              }
+              if (parsed?.refDebug) {
+                const lines = Object.entries(parsed.refDebug)
+                  .map(([k, v]: any) => `${k}: trimmed=${v.trimmedLength}`)
+                  .join(" | ");
+                errMsg = `${errMsg}\nRefs: ${lines}`;
+              }
+
             } catch {
               errMsg = raw;
             }
