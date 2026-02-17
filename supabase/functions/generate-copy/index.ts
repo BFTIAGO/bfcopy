@@ -37,8 +37,8 @@ function pickRefKey(payload: Payload): string[] {
   if (payload.funnelType === "Sazonal") return ["ref_sazonal"];
   if (payload.funnelType === "Ativação FTD") return ["ref_ativacao_ftd"];
   if (payload.funnelType === "Ativação STD / TTD / 4TD+") {
-    // Como o front agrupa, usamos as duas referências quando existirem.
-    return ["ref_ativacao_std", "ref_ativacao_ttd_4td"];
+    // Referência única para STD em diante
+    return ["ref_ativacao_std"];
   }
 
   // Reativação (simplificada)
@@ -172,9 +172,6 @@ serve(async (req) => {
           "prompt_instrucao",
           "ref_ativacao_ftd",
           "ref_ativacao_std",
-          "ref_ativacao_ttd_4td",
-          "ref_ativacao_5td_7td",
-          "ref_ativacao_8td_10td_plus",
           "ref_reativacao_sem_ftd",
           "ref_reativacao_sem_deposito",
           "ref_reativacao_sem_login",
