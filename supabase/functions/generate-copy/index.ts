@@ -151,6 +151,34 @@ function hasFiveDays(text: string) {
   return [1, 2, 3, 4, 5].every((n) => new RegExp(`\\bdia\\s*${n}\\b`, "i").test(t));
 }
 
+function stripMetaOnly(v: string) {
+  let out = v ?? "";
+  out = out
+    .split("\n")
+    .filter((line) => {
+      const l = line.trim().toLowerCase();
+      if (l.startsWith("diagnóstico:")) return false;
+      if (l.startsWith("diagnostico:")) return false;
+      if (l.startsWith("copy final:")) return false;
+      if (l === "copy final") return false;
+      return true;
+    })
+    .join("\n");
+
+  out = out.replace(/\n{3,}/g, "\n\n");
+  return out.trim();
+}
+
+function truncateAfterDay5(v: string) {
+  const s = v ?? "";
+  const m = s.match(/\bDIA\s*6\b/i);
+  if (!m || m.index == null) return s;
+  // corta no início da linha onde começa DIA 6
+  const idx = m.index;
+  const lineStart = s.lastIndexOf("\n", idx);
+  return s.slice(0, lineStart >= 0 ? lineStart : idx).trim();
+}
+
 async function callGeminiFlash(prompt: string) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) {
@@ -166,9 +194,9 @@ async function callGeminiFlash(prompt: string) {
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.55,
+        temperature: 0.5,
         topP: 0.9,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
       },
     }),
   });
@@ -422,15 +450,15 @@ serve(async (req) => {
     const basePrompt = [
       "Você é um redator CRM sênior.",
       "Escreva APENAS em Português do Brasil (PT-BR) nativo.",
-      "NÃO use emojis.",
       "NÃO use linguagem vulgar.",
       "NÃO inclua diagnóstico, explicações, metacomunicação ou títulos do tipo 'Diagnóstico'/'Copy Final'.",
       "A saída DEVE seguir fielmente o mesmo MODELO das referências (mesmas seções, labels, ordem, separadores e estilo).",
+      "Mantenha o mesmo padrão de EMOJIS do molde (se a referência usa emojis em títulos/labels, use os MESMOS; não invente emojis novos).",
       "Não copie frases literalmente: reescreva mantendo a estrutura.",
       "Respeite o guia mestre e o tom de voz do cassino.",
       "Evite inventar valores específicos se não foram fornecidos.",
       "Garanta que o texto fique completo (não pare no meio de uma frase/linha).",
-      "Se este for um funil de 5 dias, entregue obrigatoriamente DIA 1, DIA 2, DIA 3, DIA 4 e DIA 5.",
+      "Se este for um funil de 5 dias, entregue obrigatoriamente DIA 1, DIA 2, DIA 3, DIA 4 e DIA 5 (não inclua DIA 6+).",
       "",
       `CASINO: ${casinoRow.nome_casino}`,
       `TOM_DE_VOZ: ${casinoTone}`,
@@ -443,7 +471,7 @@ serve(async (req) => {
       "INSTRUÇÕES DO CASINO:",
       casinoInstruction,
       "",
-      "REFERÊNCIA (use como molde de formatação; mantenha estrutura 1:1):",
+      "REFERÊNCIA (use como TEMPLATE; mantenha a estrutura 1:1 e apenas substitua os trechos variáveis conforme entradas):",
       references.join("\n\n---\n\n"),
       "",
       "ENTRADAS DO OPERADOR:",
@@ -472,7 +500,7 @@ serve(async (req) => {
             .join("\n\n"),
       "",
       "SAÍDA:",
-      "Retorne SOMENTE a copy final no formato das referências, sem nenhum texto fora do molde.",
+      "Retorne SOMENTE a copy final no formato da referência, sem nenhum texto fora do molde.",
     ].join("\n");
 
     console.log("[generate-copy] Generating", {
@@ -498,12 +526,11 @@ serve(async (req) => {
       "Objetivo: ajustar o texto para ficar 100% aderente ao MODELO/FORMATO da REFERÊNCIA.",
       "Regras:",
       "- PT-BR nativo.",
-      "- Não use emojis.",
       "- Não use linguagem vulgar.",
       "- Não escreva diagnósticos, comentários ou explicações.",
-      "- Preserve exatamente a estrutura da referência: mesmas seções, mesma ordem, mesmos labels e separadores.",
+      "- Preserve exatamente a estrutura da referência: mesmas seções, mesma ordem, mesmos labels, separadores e padrão de emojis.",
       "- Se algo estiver faltando, complete.",
-      "- Para funil de 5 dias, garantir DIA 1..DIA 5.",
+      "- Para funil de 5 dias, garantir DIA 1..DIA 5 (não incluir DIA 6+).",
       "- Entregue SOMENTE a copy final.",
       "",
       "REFERÊNCIA:",
@@ -514,7 +541,8 @@ serve(async (req) => {
     ].join("\n");
 
     const gen2 = await callGeminiFlash(reviewPrompt);
-    let finalText = stripEmojisAndMeta((gen2.ok ? gen2.text : gen1.text) ?? "");
+    let finalText = stripMetaOnly((gen2.ok ? gen2.text : gen1.text) ?? "");
+    finalText = truncateAfterDay5(finalText);
 
     // 3) Se ainda não vier 5 dias, pedir complemento (sem alterar o que já está certo)
     if (!sazonalActive && !hasFiveDays(finalText)) {
@@ -527,9 +555,11 @@ serve(async (req) => {
         "O texto abaixo está INCOMPLETO (faltam dias do funil).",
         "Tarefa: entregar o funil COMPLETO de 5 dias (DIA 1..DIA 5) no exato molde da referência.",
         "Regras:",
-        "- Não use emojis.",
+        "- Não use linguagem vulgar.",
+        "- Preserve o padrão de emojis e headers da referência (não invente novos).",
         "- Não escreva diagnósticos nem comentários.",
         "- Preserve o que já está bom e complete o que falta.",
+        "- NÃO inclua DIA 6+.",
         "- Entregue SOMENTE a copy final.",
         "",
         "REFERÊNCIA:",
@@ -555,7 +585,10 @@ serve(async (req) => {
       ].join("\n");
 
       const gen3 = await callGeminiFlash(completionPrompt);
-      if (gen3.ok) finalText = stripEmojisAndMeta(gen3.text);
+      if (gen3.ok) {
+        finalText = stripMetaOnly(gen3.text);
+        finalText = truncateAfterDay5(finalText);
+      }
     }
 
     return new Response(JSON.stringify({ copyAll: finalText }), {
