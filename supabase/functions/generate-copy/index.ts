@@ -57,6 +57,19 @@ function normalizeCasinoName(v: string) {
     .replace(/[^a-z0-9]+/g, "");
 }
 
+function casinoNameCandidates(v: string) {
+  const base = normalizeCasinoName(v);
+  const candidates = new Set<string>([base]);
+
+  // Se vier como "*-bet", também tenta sem o sufixo "bet".
+  // Ex: "ginga-bet" -> "ginga"
+  if (base.endsWith("bet") && base.length > 3) {
+    candidates.add(base.slice(0, -3));
+  }
+
+  return Array.from(candidates).filter(Boolean);
+}
+
 function normalizeDays(payload: Payload) {
   const days = payload.days ?? [];
   return days
@@ -226,21 +239,23 @@ serve(async (req) => {
         });
       }
 
-      const target = normalizeCasinoName(payload.casino);
+      const targets = casinoNameCandidates(payload.casino);
       casinoRow = (allCasinos ?? []).find((r: any) => {
-        return normalizeCasinoName(r?.nome_casino) === target;
+        const rowKey = normalizeCasinoName(r?.nome_casino);
+        return targets.includes(rowKey);
       });
 
       if (!casinoRow) {
         console.warn("[generate-copy] Casino not found", {
           casino: payload.casino,
-          target,
+          targets,
           available: (allCasinos ?? []).map((r: any) => r?.nome_casino),
         });
         return new Response(
           JSON.stringify({
             error: "Casino não encontrado em casino_prompts.",
             casino: payload.casino,
+            tried: targets,
             availableCasinos: (allCasinos ?? []).map((r: any) => r?.nome_casino),
           }),
           {
