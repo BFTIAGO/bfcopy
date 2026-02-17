@@ -301,11 +301,27 @@ const Index = () => {
       setActiveView("output");
       showSuccess("Copy gerada.");
     } catch (e: any) {
-      const errMsg =
-        e?.context?.error_description ||
-        e?.context?.error ||
-        e?.message ||
-        "Falha ao gerar.";
+      // Supabase functions retornam detalhes no Response (context)
+      let errMsg =
+        e?.context?.error_description || e?.context?.error || e?.message || "Falha ao gerar.";
+      try {
+        if (e?.context && typeof e.context.text === "function") {
+          const raw = await e.context.text();
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              errMsg = parsed?.error || parsed?.message || raw;
+              if (parsed?.missingRefKeys?.length) {
+                errMsg = `${errMsg} (faltando: ${parsed.missingRefKeys.join(", ")})`;
+              }
+            } catch {
+              errMsg = raw;
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
       showError(errMsg);
     } finally {
       dismissToast(toastId);
