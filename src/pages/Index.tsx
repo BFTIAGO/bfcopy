@@ -301,7 +301,12 @@ const Index = () => {
       setActiveView("output");
       showSuccess("Copy gerada.");
     } catch (e: any) {
-      showError(e?.message ?? "Falha ao gerar.");
+      const errMsg =
+        e?.context?.error_description ||
+        e?.context?.error ||
+        e?.message ||
+        "Falha ao gerar.";
+      showError(errMsg);
     } finally {
       dismissToast(toastId);
     }
