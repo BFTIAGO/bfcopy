@@ -81,5 +81,11 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^6.3.4"
+  },
+  "overrides": {
+    "picomatch": "4.0.2",
+    "tinyglobby": {
+      "picomatch": "4.0.2"
+    }
   }
 }
