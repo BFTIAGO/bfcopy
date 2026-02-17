@@ -50,6 +50,13 @@ function pickRefKey(payload: Payload): string[] {
   return ["ref_reativacao_sem_ftd"];
 }
 
+function normalizeCasinoName(v: string) {
+  return (v ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
 function normalizeDays(payload: Payload) {
   const days = payload.days ?? [];
   return days
@@ -178,30 +185,70 @@ serve(async (req) => {
       );
     }
 
-    const { data: casinoRow, error: casinoErr } = await supabase
+    const casinoSelect = [
+      "nome_casino",
+      "tom_voz",
+      "prompt_instrucao",
+      "ref_ativacao_ftd",
+      "ref_ativacao_std",
+      "ref_reativacao_sem_ftd",
+      "ref_reativacao_sem_deposito",
+      "ref_reativacao_sem_login",
+      "ref_sazonal",
+    ].join(",");
+
+    // 1) Tentativa por match exato
+    const { data: casinoExact, error: casinoExactErr } = await supabase
       .from("casino_prompts")
-      .select(
-        [
-          "nome_casino",
-          "tom_voz",
-          "prompt_instrucao",
-          "ref_ativacao_ftd",
-          "ref_ativacao_std",
-          "ref_reativacao_sem_ftd",
-          "ref_reativacao_sem_deposito",
-          "ref_reativacao_sem_login",
-          "ref_sazonal",
-        ].join(","),
-      )
+      .select(casinoSelect)
       .eq("nome_casino", payload.casino)
       .maybeSingle();
 
-    if (casinoErr || !casinoRow) {
-      console.error("[generate-copy] casino_prompts missing", { casinoErr, casino: payload.casino });
-      return new Response(JSON.stringify({ error: "Casino não encontrado em casino_prompts." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (casinoExactErr) {
+      console.error("[generate-copy] casino_prompts exact query error", {
+        casinoExactErr,
+        casino: payload.casino,
       });
+    }
+
+    // 2) Fallback por match normalizado (evita diferença de hífen/espaço/case)
+    let casinoRow = casinoExact as any;
+    if (!casinoRow) {
+      const { data: allCasinos, error: allErr } = await supabase
+        .from("casino_prompts")
+        .select(casinoSelect);
+
+      if (allErr) {
+        console.error("[generate-copy] casino_prompts list error", { allErr });
+        return new Response(JSON.stringify({ error: "Falha ao ler casino_prompts." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const target = normalizeCasinoName(payload.casino);
+      casinoRow = (allCasinos ?? []).find((r: any) => {
+        return normalizeCasinoName(r?.nome_casino) === target;
+      });
+
+      if (!casinoRow) {
+        console.warn("[generate-copy] Casino not found", {
+          casino: payload.casino,
+          target,
+          available: (allCasinos ?? []).map((r: any) => r?.nome_casino),
+        });
+        return new Response(
+          JSON.stringify({
+            error: "Casino não encontrado em casino_prompts.",
+            casino: payload.casino,
+            availableCasinos: (allCasinos ?? []).map((r: any) => r?.nome_casino),
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
     }
 
     const casinoTone = String(casinoRow.tom_voz ?? "").trim();

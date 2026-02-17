@@ -314,9 +314,17 @@ const Index = () => {
               if (parsed?.missingRefKeys?.length) {
                 errMsg = `${errMsg} (faltando: ${parsed.missingRefKeys.join(", ")})`;
               }
+              if (parsed?.casino) {
+                errMsg = `${errMsg} (selecionado: ${parsed.casino})`;
+              }
+              if (parsed?.availableCasinos?.length) {
+                const list = parsed.availableCasinos.slice(0, 12).join(", ");
+                errMsg = `${errMsg}\nDisponíveis: ${list}${parsed.availableCasinos.length > 12 ? "…" : ""}`;
+              }
             } catch {
               errMsg = raw;
             }
+
           }
         }
       } catch {
