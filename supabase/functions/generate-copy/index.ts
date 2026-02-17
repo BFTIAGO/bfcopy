@@ -117,9 +117,9 @@ async function callGeminiFlash(prompt: string) {
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.6,
+        temperature: 0.55,
         topP: 0.9,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
       },
     }),
   });
@@ -143,6 +143,35 @@ async function callGeminiFlash(prompt: string) {
   }
 
   return { ok: true, text: String(text) } as const;
+}
+
+function stripEmojisAndMeta(v: string) {
+  let out = v ?? "";
+  // Remove linhas de meta comuns
+  out = out
+    .split("\n")
+    .filter((line) => {
+      const l = line.trim().toLowerCase();
+      if (l.startsWith("diagnóstico:")) return false;
+      if (l.startsWith("diagnostico:")) return false;
+      if (l.startsWith("copy final:")) return false;
+      if (l.startsWith("copy final")) return false;
+      return true;
+    })
+    .join("\n");
+
+  // Remove emojis / pictogramas
+  try {
+    out = out.replace(/[\p{Extended_Pictographic}]/gu, "");
+  } catch {
+    // fallback simples
+    out = out.replace(/[\u2190-\u21FF\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]+/g, "");
+  }
+
+  // Limpa espaços duplicados
+  out = out.replace(/[ \t]+/g, " ");
+  out = out.replace(/\n{3,}/g, "\n\n");
+  return out.trim();
 }
 
 serve(async (req) => {
@@ -314,7 +343,7 @@ serve(async (req) => {
     const sazonalActive = payload.funnelType === "Sazonal";
     const sazonal = payload.sazonal ?? {};
 
-    const prompt = [
+    const basePrompt = [
       "Você é um redator CRM sênior.",
       "Escreva APENAS em Português do Brasil (PT-BR) nativo.",
       "NÃO use emojis.",
@@ -336,7 +365,7 @@ serve(async (req) => {
       "INSTRUÇÕES DO CASINO:",
       casinoInstruction,
       "",
-      "REFERÊNCIAS (use como molde de formatação):",
+      "REFERÊNCIA (use como molde de formatação; mantenha estrutura 1:1):",
       references.join("\n\n---\n\n"),
       "",
       "ENTRADAS DO OPERADOR:",
@@ -374,15 +403,38 @@ serve(async (req) => {
       days: sazonalActive ? "sazonal" : days.map((d) => d.day),
     });
 
-    const gen = await callGeminiFlash(prompt);
-    if (!gen.ok) {
-      return new Response(JSON.stringify({ error: gen.error }), {
+    // 1) Geração
+    const gen1 = await callGeminiFlash(basePrompt);
+    if (!gen1.ok) {
+      return new Response(JSON.stringify({ error: gen1.error }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify({ copyAll: gen.text }), {
+    // 2) Revisão para forçar aderência ao molde (reduz deriva e truncamentos)
+    const reviewPrompt = [
+      "Você é um revisor de copy CRM extremamente rígido.",
+      "Objetivo: ajustar o texto para ficar 100% aderente ao MODELO/FORMATO da REFERÊNCIA.",
+      "Regras:",
+      "- PT-BR nativo.",
+      "- Não use emojis.",
+      "- Não escreva diagnósticos, comentários ou explicações.",
+      "- Preserve exatamente a estrutura da referência: mesmas seções, mesma ordem, mesmos labels e separadores.",
+      "- Se algo estiver faltando, complete.",
+      "- Entregue SOMENTE a copy final.",
+      "",
+      "REFERÊNCIA:",
+      references.join("\n\n---\n\n"),
+      "",
+      "RASCUNHO:",
+      gen1.text,
+    ].join("\n");
+
+    const gen2 = await callGeminiFlash(reviewPrompt);
+    const finalText = stripEmojisAndMeta((gen2.ok ? gen2.text : gen1.text) ?? "");
+
+    return new Response(JSON.stringify({ copyAll: finalText }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

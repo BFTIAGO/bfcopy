@@ -982,17 +982,6 @@ const Index = () => {
                     </div>
                   </CardContent>
                 </Card>
-
-                <Card className="rounded-3xl border-slate-200">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Canais (próxima etapa)</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-slate-600">
-                      Se você quiser, depois a gente separa a saída por Email/Push/SMS/Popup com botões de copiar por canal.
-                    </p>
-                  </CardContent>
-                </Card>
               </div>
             </CardContent>
           </Card>
