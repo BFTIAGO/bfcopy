@@ -85,7 +85,7 @@ const daySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["gameName"],
-          message: "Nome do jogo é obrigatório no Modo A.",
+          message: "Nome do jogo é obrigatório em ‘Deposite, jogue e ganhe’.",
         });
       }
       const expected = d.buttonCount ?? 0;
@@ -104,7 +104,7 @@ const daySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["freeMessage"],
-          message: "Mensagem do dia é obrigatória no Modo B.",
+          message: "Mensagem do dia é obrigatória em ‘Outro tipo de oferta’.",
         });
       }
     }
@@ -191,7 +191,7 @@ const formSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["days"],
-          message: "Preencha pelo menos 1 dia (Modo A ou Modo B) antes de gerar.",
+          message: "Preencha pelo menos 1 dia (Deposite, jogue e ganhe / Outro tipo de oferta) antes de gerar.",
         });
       }
     }
@@ -598,7 +598,7 @@ const Index = () => {
                             Ofertas do funil (5 dias)
                           </h2>
                           <p className="text-sm text-slate-600">
-                            Use Modo A (botões) ou Modo B (texto livre) por dia.
+                            Use 'Deposite, jogue e ganhe' (botões) ou 'Outro tipo de oferta' (texto livre) por dia.
                           </p>
                         </div>
                         <Badge
@@ -667,15 +667,15 @@ const Index = () => {
                                         >
                                           <ToggleGroupItem
                                             value="A"
-                                            className="rounded-xl data-[state=on]:bg-indigo-600 data-[state=on]:text-white"
+                                            className="rounded-xl px-3 py-2 text-xs data-[state=on]:bg-indigo-600 data-[state=on]:text-white sm:text-sm"
                                           >
-                                            Modo A
+                                            Deposite, jogue e ganhe
                                           </ToggleGroupItem>
                                           <ToggleGroupItem
                                             value="B"
-                                            className="rounded-xl data-[state=on]:bg-indigo-600 data-[state=on]:text-white"
+                                            className="rounded-xl px-3 py-2 text-xs data-[state=on]:bg-indigo-600 data-[state=on]:text-white sm:text-sm"
                                           >
-                                            Modo B
+                                            Outro tipo de oferta
                                           </ToggleGroupItem>
                                         </ToggleGroup>
                                       </FormControl>
