@@ -1,17 +1,919 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import React, { useMemo, useState } from "react";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useFieldArray, useForm } from "react-hook-form";
 
-import { MadeWithDyad } from "@/components/made-with-dyad";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components/ui/toggle-group";
+import { Switch } from "@/components/ui/switch";
+
+import { showError, showLoading, showSuccess, dismissToast } from "@/utils/toast";
+
+const casinos = [
+  "4play",
+  "4win",
+  "b1bet",
+  "betfalcons",
+  "betgorillas",
+  "betvip",
+  "ginga-bet",
+  "lider-bet",
+  "pagol",
+] as const;
+
+const funnelTypes = [
+  "Ativação FTD",
+  "Ativação STD / TTD / 4TD+",
+  "Reativação",
+  "Sazonal",
+] as const;
+
+const reativacaoReguas = [
+  "Sem FTD",
+  "7D",
+  "15D",
+  "21D",
+  "30D",
+  "40D",
+  "50D",
+  "60D",
+  "70D",
+  "80D",
+  "90D",
+  "120D",
+  "150D",
+  "180D",
+] as const;
+
+const tiers = ["Tier 1", "Tier 2", "Tier 3"] as const;
+
+const daySchema = z
+  .object({
+    mode: z.enum(["A", "B"]).default("A"),
+    gameName: z.string().optional(),
+    buttonCount: z.number().int().min(1).max(5).default(3),
+    buttons: z.array(z.object({ text: z.string().optional() })).default([]),
+    freeMessage: z.string().optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.mode === "A") {
+      if (!d.gameName || d.gameName.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["gameName"],
+          message: "Nome do jogo é obrigatório no Modo A.",
+        });
+      }
+      const expected = d.buttonCount ?? 0;
+      for (let i = 0; i < expected; i++) {
+        const t = d.buttons?.[i]?.text ?? "";
+        if (t.trim().length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["buttons", i, "text"],
+            message: `Preencha o texto do Botão ${i + 1}.`,
+          });
+        }
+      }
+    } else {
+      if (!d.freeMessage || d.freeMessage.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["freeMessage"],
+          message: "Mensagem do dia é obrigatória no Modo B.",
+        });
+      }
+    }
+  });
+
+const formSchema = z
+  .object({
+    casino: z.enum(casinos),
+    funnelType: z.enum(funnelTypes),
+    reativacaoRegua: z.enum(reativacaoReguas).optional(),
+    tier: z.enum(tiers),
+
+    days: z
+      .array(daySchema)
+      .length(5)
+      .default([
+        { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
+        { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
+        { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
+        { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
+        { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
+      ]),
+
+    sazonal: z
+      .object({
+        gameName: z.string().optional(),
+        offerDescription: z.string().optional(),
+        includeUpsellDownsell: z.boolean().default(false),
+        upsell: z.string().optional(),
+        downsell: z.string().optional(),
+      })
+      .default({ includeUpsellDownsell: false }),
+  })
+  .superRefine((data, ctx) => {
+    if (data.funnelType === "Reativação" && !data.reativacaoRegua) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["reativacaoRegua"],
+        message: "Selecione a régua de Reativação.",
+      });
+    }
+
+    if (data.funnelType === "Sazonal") {
+      if (!data.sazonal.gameName || data.sazonal.gameName.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sazonal", "gameName"],
+          message: "Nome do jogo é obrigatório na Sazonal.",
+        });
+      }
+      if (
+        !data.sazonal.offerDescription ||
+        data.sazonal.offerDescription.trim().length === 0
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sazonal", "offerDescription"],
+          message: "Descrição da oferta é obrigatória na Sazonal.",
+        });
+      }
+      if (data.sazonal.includeUpsellDownsell) {
+        const upsellOk = (data.sazonal.upsell ?? "").trim().length > 0;
+        const downsellOk = (data.sazonal.downsell ?? "").trim().length > 0;
+        if (!upsellOk && !downsellOk) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["sazonal", "includeUpsellDownsell"],
+            message: "Se marcar Upsell/Downsell, preencha pelo menos um deles.",
+          });
+        }
+      }
+    } else {
+      // Funis 5 dias: pelo menos 1 dia precisa estar preenchido (MODO A ou B).
+      // Como validamos campos obrigatórios por dia, o ponto aqui é permitir que o operador
+      // deixe dias em branco SEM travar a geração — mas precisa haver ao menos 1 dia ativo.
+      // Vamos considerar ativo se o usuário tocou em qualquer campo: jogo, algum botão ou mensagem.
+      const anyTouched = data.days.some((d) => {
+        const game = (d.gameName ?? "").trim();
+        const free = (d.freeMessage ?? "").trim();
+        const anyBtn = (d.buttons ?? []).some((b) => (b.text ?? "").trim().length > 0);
+        return game.length > 0 || free.length > 0 || anyBtn;
+      });
+      if (!anyTouched) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["days"],
+          message: "Preencha pelo menos 1 dia (Modo A ou Modo B) antes de gerar.",
+        });
+      }
+    }
+  });
+
+type FormValues = z.infer<typeof formSchema>;
+
+type SmarticoOutput = {
+  funnel: string;
+  casino: string;
+  tier: string;
+  reativacaoRegua?: string;
+  // Depois o backend vai devolver as peças. Mantemos flexível.
+  piecesByDay?: Array<{
+    day: number;
+    email?: string;
+    push?: string;
+    sms?: string;
+    popup?: string;
+  }>;
+  sazonal?: {
+    email?: string;
+    push?: string;
+    sms?: string;
+    popup?: string;
+  };
+};
+
+function ensureButtonsLen(buttons: Array<{ text?: string }>, n: number) {
+  const next = [...buttons];
+  while (next.length < n) next.push({});
+  return next.slice(0, n);
+}
 
 const Index = () => {
+  const [activeView, setActiveView] = useState<"form" | "output">("form");
+  const [lastPayload, setLastPayload] = useState<FormValues | null>(null);
+  const [output, setOutput] = useState<SmarticoOutput | null>(null);
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      casino: "b1bet",
+      funnelType: "Ativação FTD",
+      tier: "Tier 1",
+      days: [
+        { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
+        { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
+        { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
+        { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
+        { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
+      ],
+      sazonal: {
+        gameName: "",
+        offerDescription: "",
+        includeUpsellDownsell: false,
+        upsell: "",
+        downsell: "",
+      },
+    },
+    mode: "onChange",
+  });
+
+  const daysArray = useFieldArray({ control: form.control, name: "days" });
+
+  const funnelType = form.watch("funnelType");
+  const includeUD = form.watch("sazonal.includeUpsellDownsell");
+
+  const headline = useMemo(() => {
+    const map: Record<(typeof funnelTypes)[number], { title: string; subtitle: string }> = {
+      "Ativação FTD": {
+        title: "Gerador de Copy CRM – Smartico",
+        subtitle: "Ativação (boas-vindas) • 5 dias • pronto pra CTRL+C/CTRL+V",
+      },
+      "Ativação STD / TTD / 4TD+": {
+        title: "Gerador de Copy CRM – Smartico",
+        subtitle: "Ativação (depósitos seguintes) • 5 dias • foco em conversão",
+      },
+      Reativação: {
+        title: "Gerador de Copy CRM – Smartico",
+        subtitle: "Reativação • 5 dias • resgate de jogador offline/dormente",
+      },
+      Sazonal: {
+        title: "Gerador de Copy CRM – Smartico",
+        subtitle: "Sazonal • 1 dia • campanha relâmpago para 3+ depósitos",
+      },
+    };
+    return map[funnelType];
+  }, [funnelType]);
+
+  async function handleGenerate(values: FormValues) {
+    setLastPayload(values);
+
+    const toastId = showLoading("Gerando copy…");
+    try {
+      // Backend será ligado na próxima etapa.
+      // Por enquanto, apenas mantém a UX completa (validação + tela de output) sem expor secrets no client.
+      setOutput({
+        funnel: values.funnelType,
+        casino: values.casino,
+        tier: values.tier,
+        reativacaoRegua: values.reativacaoRegua,
+      });
+      setActiveView("output");
+      showSuccess("Inputs validados. Pronto para gerar quando o backend estiver ligado.");
+    } catch (e: any) {
+      showError(e?.message ?? "Falha ao gerar.");
+    } finally {
+      dismissToast(toastId);
+    }
+  }
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => showSuccess("Copiado!") )
+      .catch(() => showError("Não foi possível copiar."));
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">
-          Start building your amazing project here!
-        </p>
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
+        <div className="mb-6 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="rounded-full bg-indigo-600 px-3 py-1 text-white hover:bg-indigo-600">
+              Interno
+            </Badge>
+            <Badge
+              variant="secondary"
+              className="rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-50"
+            >
+              Smartico.ai
+            </Badge>
+          </div>
+          <h1 className="text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            {headline.title}
+          </h1>
+          <p className="text-pretty text-slate-600">{headline.subtitle}</p>
+        </div>
+
+        {activeView === "form" ? (
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
+            <CardHeader className="space-y-2">
+              <CardTitle className="text-xl font-semibold text-slate-900">
+                Configuração
+              </CardTitle>
+              <p className="text-sm text-slate-600">
+                Preencha o cassino, funil e ofertas. A UI valida tudo antes de liberar a geração.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleGenerate)} className="space-y-8">
+                  {/* BLOCO 1 */}
+                  <section className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900">
+                          Cassino
+                        </h2>
+                        <p className="text-sm text-slate-600">Obrigatório</p>
+                      </div>
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="casino"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-700">Seleção do cassino</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white">
+                                <SelectValue placeholder="Selecione" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="rounded-2xl">
+                              {casinos.map((c) => (
+                                <SelectItem key={c} value={c}>
+                                  {c}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </section>
+
+                  <Separator className="bg-slate-100" />
+
+                  {/* BLOCO 2 */}
+                  <section className="space-y-4">
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-900">Funil</h2>
+                      <p className="text-sm text-slate-600">Obrigatório</p>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="funnelType"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-slate-700">Tipo de funil</FormLabel>
+                            <Select
+                              value={field.value}
+                              onValueChange={(v) => {
+                                field.onChange(v);
+                                // Reset de régua quando sair de Reativação
+                                if (v !== "Reativação") form.setValue("reativacaoRegua", undefined);
+                              }}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white">
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="rounded-2xl">
+                                {funnelTypes.map((f) => (
+                                  <SelectItem key={f} value={f}>
+                                    {f}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="tier"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-slate-700">Tier do jogador</FormLabel>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <FormControl>
+                                <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white">
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="rounded-2xl">
+                                {tiers.map((t) => (
+                                  <SelectItem key={t} value={t}>
+                                    {t}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {funnelType === "Reativação" && (
+                      <FormField
+                        control={form.control}
+                        name="reativacaoRegua"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-slate-700">Régua de reativação</FormLabel>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <FormControl>
+                                <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white">
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="rounded-2xl">
+                                {reativacaoReguas.map((r) => (
+                                  <SelectItem key={r} value={r}>
+                                    {r}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </section>
+
+                  <Separator className="bg-slate-100" />
+
+                  {/* BLOCO 3 */}
+                  {funnelType === "Sazonal" ? (
+                    <section className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900">Oferta Sazonal</h2>
+                        <p className="text-sm text-slate-600">1 dia (oferta única por envio)</p>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="sazonal.gameName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-700">Nome do jogo</FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  className="h-11 rounded-2xl border-slate-200"
+                                  placeholder='Ex: "Tigre Sortudo"'
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <div className="hidden md:block" />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="sazonal.offerDescription"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-slate-700">Descrição da oferta</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                {...field}
+                                className="min-h-[110px] rounded-2xl border-slate-200"
+                                placeholder="Ex: Deposite R$50, jogue R$50 e ganhe 10 Giros Extras"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="font-semibold text-slate-900">Upsell/Downsell</p>
+                            <p className="text-sm text-slate-600">Opcional</p>
+                          </div>
+                          <FormField
+                            control={form.control}
+                            name="sazonal.includeUpsellDownsell"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2">
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    className="data-[state=checked]:bg-indigo-600"
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        {includeUD && (
+                          <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            <FormField
+                              control={form.control}
+                              name="sazonal.upsell"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-slate-700">Upsell</FormLabel>
+                                  <FormControl>
+                                    <Textarea
+                                      {...field}
+                                      className="min-h-[90px] rounded-2xl border-slate-200 bg-white"
+                                      placeholder="Opcional"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="sazonal.downsell"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-slate-700">Downsell</FormLabel>
+                                  <FormControl>
+                                    <Textarea
+                                      {...field}
+                                      className="min-h-[90px] rounded-2xl border-slate-200 bg-white"
+                                      placeholder="Opcional"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  ) : (
+                    <section className="space-y-4">
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <h2 className="text-base font-semibold text-slate-900">
+                            Ofertas do funil (5 dias)
+                          </h2>
+                          <p className="text-sm text-slate-600">
+                            Use Modo A (botões) ou Modo B (texto livre) por dia.
+                          </p>
+                        </div>
+                        <Badge
+                          variant="secondary"
+                          className="rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50"
+                        >
+                          DIA 1–5
+                        </Badge>
+                      </div>
+
+                      <Tabs defaultValue="day-1" className="w-full">
+                        <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-3xl bg-slate-50 p-2">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <TabsTrigger
+                              key={i}
+                              value={`day-${i + 1}`}
+                              className="rounded-2xl data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
+                            >
+                              Dia {i + 1}
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+
+                        {daysArray.fields.map((field, dayIndex) => {
+                          const dayMode = form.watch(`days.${dayIndex}.mode`);
+                          const buttonCount = form.watch(`days.${dayIndex}.buttonCount`);
+                          const buttons = form.watch(`days.${dayIndex}.buttons`) ?? [];
+
+                          const safeButtons = ensureButtonsLen(buttons, buttonCount);
+                          // Mantém o array no form sincronizado com o count
+                          if (safeButtons.length !== buttons.length) {
+                            form.setValue(`days.${dayIndex}.buttons`, safeButtons, {
+                              shouldValidate: false,
+                              shouldDirty: true,
+                            });
+                          }
+
+                          return (
+                            <TabsContent
+                              key={field.id}
+                              value={`day-${dayIndex + 1}`}
+                              className="mt-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-6"
+                            >
+                              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">Dia {dayIndex + 1}</p>
+                                  <p className="text-sm text-slate-600">
+                                    Se não quiser usar este dia, deixe em branco.
+                                  </p>
+                                </div>
+
+                                <FormField
+                                  control={form.control}
+                                  name={`days.${dayIndex}.mode`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormControl>
+                                        <ToggleGroup
+                                          type="single"
+                                          value={field.value}
+                                          onValueChange={(v) => {
+                                            if (!v) return;
+                                            field.onChange(v);
+                                          }}
+                                          className="rounded-2xl bg-slate-50 p-1"
+                                        >
+                                          <ToggleGroupItem
+                                            value="A"
+                                            className="rounded-xl data-[state=on]:bg-indigo-600 data-[state=on]:text-white"
+                                          >
+                                            Modo A
+                                          </ToggleGroupItem>
+                                          <ToggleGroupItem
+                                            value="B"
+                                            className="rounded-xl data-[state=on]:bg-indigo-600 data-[state=on]:text-white"
+                                          >
+                                            Modo B
+                                          </ToggleGroupItem>
+                                        </ToggleGroup>
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+
+                              <div className="mt-6 space-y-5">
+                                {dayMode === "A" ? (
+                                  <>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                      <FormField
+                                        control={form.control}
+                                        name={`days.${dayIndex}.gameName`}
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-slate-700">Nome do jogo</FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                {...field}
+                                                className="h-11 rounded-2xl border-slate-200"
+                                                placeholder='Ex: "Tigre Sortudo"'
+                                              />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+
+                                      <FormField
+                                        control={form.control}
+                                        name={`days.${dayIndex}.buttonCount`}
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-slate-700">Quantidade de botões</FormLabel>
+                                            <Select
+                                              value={String(field.value)}
+                                              onValueChange={(v) => field.onChange(Number(v))}
+                                            >
+                                              <FormControl>
+                                                <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white">
+                                                  <SelectValue placeholder="Selecione" />
+                                                </SelectTrigger>
+                                              </FormControl>
+                                              <SelectContent className="rounded-2xl">
+                                                {[1, 2, 3, 4, 5].map((n) => (
+                                                  <SelectItem key={n} value={String(n)}>
+                                                    {n}
+                                                  </SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+
+                                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                                      <div className="mb-3 flex items-center justify-between">
+                                        <p className="font-semibold text-slate-900">Textos dos botões</p>
+                                        <Badge
+                                          variant="secondary"
+                                          className="rounded-full bg-indigo-50 text-indigo-700"
+                                        >
+                                          {buttonCount} botão(ões)
+                                        </Badge>
+                                      </div>
+
+                                      <div className="grid gap-4">
+                                        {Array.from({ length: buttonCount }).map((_, i) => (
+                                          <FormField
+                                            key={i}
+                                            control={form.control}
+                                            name={`days.${dayIndex}.buttons.${i}.text`}
+                                            render={({ field }) => (
+                                              <FormItem>
+                                                <FormLabel className="text-slate-700">Botão {i + 1}</FormLabel>
+                                                <FormControl>
+                                                  <Input
+                                                    {...field}
+                                                    className="h-11 rounded-2xl border-slate-200 bg-white"
+                                                    placeholder="Ex: Deposite R$50, jogue R$50 e ganhe 10 Giros Extras"
+                                                  />
+                                                </FormControl>
+                                                <FormMessage />
+                                              </FormItem>
+                                            )}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <FormField
+                                    control={form.control}
+                                    name={`days.${dayIndex}.freeMessage`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-slate-700">Mensagem do dia</FormLabel>
+                                        <FormControl>
+                                          <Textarea
+                                            {...field}
+                                            className="min-h-[120px] rounded-2xl border-slate-200"
+                                            placeholder="Ex: Participe dos torneios de ate R$25 mil da PGSOFT"
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                )}
+                              </div>
+                            </TabsContent>
+                          );
+                        })}
+                      </Tabs>
+
+                      <FormMessage />
+                    </section>
+                  )}
+
+                  <Separator className="bg-slate-100" />
+
+                  {/* BLOCO 4 */}
+                  <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Gerar copy</p>
+                      <p className="text-sm text-slate-600">
+                        A geração real (IA) será ligada na próxima etapa.
+                      </p>
+                    </div>
+                    <Button
+                      type="submit"
+                      className="h-11 rounded-2xl bg-indigo-600 px-6 text-white hover:bg-indigo-700"
+                    >
+                      GERAR COPY
+                    </Button>
+                  </section>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
+            <CardHeader className="space-y-2">
+              <CardTitle className="text-xl font-semibold text-slate-900">
+                Output
+              </CardTitle>
+              <p className="text-sm text-slate-600">
+                A tela já está pronta para receber as peças do backend (Email, Push, SMS, Popup).
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Resumo</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge className="rounded-full bg-indigo-600 text-white hover:bg-indigo-600">
+                    {output?.casino}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-50"
+                  >
+                    {output?.funnel}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="rounded-full bg-amber-50 text-amber-800 hover:bg-amber-50"
+                  >
+                    {output?.tier}
+                  </Badge>
+                  {output?.reativacaoRegua && (
+                    <Badge
+                      variant="secondary"
+                      className="rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50"
+                    >
+                      {output.reativacaoRegua}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card className="rounded-3xl border-slate-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Email</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-slate-600">
+                      Assim que o backend estiver ligado, cada dia (ou sazonal) vai aparecer aqui.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      className="w-full rounded-2xl"
+                      onClick={() => copyToClipboard(JSON.stringify(lastPayload, null, 2))}
+                    >
+                      COPIAR INPUTS (DEBUG)
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-3xl border-slate-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Push • SMS • Popup</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-slate-600">
+                      Copiar tudo, copiar por canal, voltar e editar e gerar novamente.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        className="rounded-2xl bg-slate-900 text-white hover:bg-slate-800"
+                        onClick={() => setActiveView("form")}
+                      >
+                        VOLTAR
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="rounded-2xl"
+                        onClick={() => {
+                          if (!lastPayload) return;
+                          form.reset(lastPayload);
+                          setActiveView("form");
+                        }}
+                      >
+                        EDITAR
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
-      <MadeWithDyad />
     </div>
   );
 };
