@@ -53,22 +53,7 @@ const funnelTypes = [
   "Sazonal",
 ] as const;
 
-const reativacaoReguas = [
-  "Sem FTD",
-  "7D",
-  "15D",
-  "21D",
-  "30D",
-  "40D",
-  "50D",
-  "60D",
-  "70D",
-  "80D",
-  "90D",
-  "120D",
-  "150D",
-  "180D",
-] as const;
+const reativacaoReguas = ["Sem FTD", "Sem Depósito", "Sem Login"] as const;
 
 const tiers = ["Tier 1", "Tier 2", "Tier 3"] as const;
 

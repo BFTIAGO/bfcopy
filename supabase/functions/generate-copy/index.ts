@@ -41,26 +41,13 @@ function pickRefKey(payload: Payload): string[] {
     return ["ref_ativacao_std", "ref_ativacao_ttd_4td"];
   }
 
-  // Reativação
-  const r = (payload.reativacaoRegua ?? "").trim().toUpperCase();
-  if (r === "7D") return ["ref_reativacao_7d"];
-  if (r === "15D") return ["ref_reativacao_14d"];
-  if (r === "21D") return ["ref_reativacao_21d"];
-  if (r === "30D") return ["ref_reativacao_30d"];
-  if (["40D", "50D", "60D"].includes(r)) return ["ref_reativacao_40d_60d"];
-  if ([
-    "70D",
-    "80D",
-    "90D",
-    "120D",
-    "150D",
-    "180D",
-  ].includes(r)) {
-    return ["ref_reativacao_70d_180d"];
-  }
+  // Reativação (simplificada)
+  const r = (payload.reativacaoRegua ?? "").trim();
+  if (r === "Sem FTD") return ["ref_reativacao_sem_ftd"];
+  if (r === "Sem Depósito") return ["ref_reativacao_sem_deposito"];
+  if (r === "Sem Login") return ["ref_reativacao_sem_login"];
 
-  // Sem FTD (ou qualquer outro): melhor aproximação
-  return ["ref_reativacao_7d"];
+  return ["ref_reativacao_sem_ftd"];
 }
 
 function normalizeDays(payload: Payload) {
@@ -188,12 +175,9 @@ serve(async (req) => {
           "ref_ativacao_ttd_4td",
           "ref_ativacao_5td_7td",
           "ref_ativacao_8td_10td_plus",
-          "ref_reativacao_7d",
-          "ref_reativacao_14d",
-          "ref_reativacao_21d",
-          "ref_reativacao_30d",
-          "ref_reativacao_40d_60d",
-          "ref_reativacao_70d_180d",
+          "ref_reativacao_sem_ftd",
+          "ref_reativacao_sem_deposito",
+          "ref_reativacao_sem_login",
           "ref_sazonal",
         ].join(","),
       )
