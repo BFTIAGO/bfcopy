@@ -941,7 +941,7 @@ const Index = () => {
                     </pre>
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2">
                     <Button
                       className="h-11 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700"
                       onClick={() => copyToClipboard(output?.copyAll ?? "")}
@@ -949,14 +949,8 @@ const Index = () => {
                     >
                       COPIAR TUDO
                     </Button>
-                    <Button
-                      variant="secondary"
-                      className="h-11 rounded-2xl"
-                      onClick={() => copyToClipboard(JSON.stringify(lastPayload, null, 2))}
-                    >
-                      COPIAR INPUTS (DEBUG)
-                    </Button>
                   </div>
+
                 </CardContent>
               </Card>
 

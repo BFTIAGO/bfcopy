@@ -119,7 +119,7 @@ async function callGeminiFlash(prompt: string) {
       generationConfig: {
         temperature: 0.6,
         topP: 0.9,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
       },
     }),
   });
@@ -317,11 +317,13 @@ serve(async (req) => {
     const prompt = [
       "Você é um redator CRM sênior.",
       "Escreva APENAS em Português do Brasil (PT-BR) nativo.",
-      "Não use inglês. Não explique. Não inclua comentários.",
+      "NÃO use emojis.",
+      "NÃO inclua diagnóstico, explicações, metacomunicação ou títulos do tipo 'Diagnóstico'/'Copy Final'.",
       "A saída DEVE seguir fielmente o mesmo MODELO das referências (mesmas seções, labels, ordem, separadores e estilo).",
       "Não copie frases literalmente: reescreva mantendo a estrutura.",
       "Respeite o guia mestre e o tom de voz do cassino.",
       "Evite inventar valores específicos se não foram fornecidos.",
+      "Garanta que o texto fique completo (não pare no meio de uma frase/linha).",
       "",
       `CASINO: ${casinoRow.nome_casino}`,
       `TOM_DE_VOZ: ${casinoTone}`,
@@ -361,7 +363,7 @@ serve(async (req) => {
             .join("\n\n"),
       "",
       "SAÍDA:",
-      "Entregue somente a copy final no formato das referências.",
+      "Retorne SOMENTE a copy final no formato das referências, sem nenhum texto fora do molde.",
     ].join("\n");
 
     console.log("[generate-copy] Generating", {
