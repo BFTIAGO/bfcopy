@@ -214,6 +214,26 @@ serve(async (req) => {
       .filter((v) => typeof v === "string" && v.trim().length > 0)
       .map((v) => String(v).trim());
 
+    if (references.length === 0) {
+      console.warn("[generate-copy] Missing references for funnel", {
+        casino: payload.casino,
+        funnel: payload.funnelType,
+        reativacaoRegua: payload.reativacaoRegua,
+        refKeys,
+      });
+      return new Response(
+        JSON.stringify({
+          error:
+            "Não é possível gerar: falta referência cadastrada para esse cassino/funil (casino_prompts.ref_*).",
+          missingRefKeys: refKeys,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const days = normalizeDays(payload);
 
     const sazonalActive = payload.funnelType === "Sazonal";
