@@ -32,6 +32,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 
 import { showError, showLoading, showSuccess, dismissToast } from "@/utils/toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const casinos = [
   "4play",
@@ -104,7 +105,7 @@ const daySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["freeMessage"],
-          message: "Mensagem do dia é obrigatória em ‘Outro tipo de oferta’.",
+          message: "Mensagem do dia é obrigatória em 'Outro tipo de oferta'.",
         });
       }
     }
@@ -204,6 +205,7 @@ type SmarticoOutput = {
   casino: string;
   tier: string;
   reativacaoRegua?: string;
+  copyAll?: string;
   // Depois o backend vai devolver as peças. Mantemos flexível.
   piecesByDay?: Array<{
     day: number;
@@ -287,16 +289,21 @@ const Index = () => {
 
     const toastId = showLoading("Gerando copy…");
     try {
-      // Backend será ligado na próxima etapa.
-      // Por enquanto, apenas mantém a UX completa (validação + tela de output) sem expor secrets no client.
+      const { data, error } = await supabase.functions.invoke("generate-copy", {
+        body: values,
+      });
+
+      if (error) throw error;
+
       setOutput({
         funnel: values.funnelType,
         casino: values.casino,
         tier: values.tier,
         reativacaoRegua: values.reativacaoRegua,
+        copyAll: data?.copyAll ?? "",
       });
       setActiveView("output");
-      showSuccess("Inputs validados. Pronto para gerar quando o backend estiver ligado.");
+      showSuccess("Copy gerada.");
     } catch (e: any) {
       showError(e?.message ?? "Falha ao gerar.");
     } finally {
@@ -828,7 +835,7 @@ const Index = () => {
                 Output
               </CardTitle>
               <p className="text-sm text-slate-600">
-                A tela já está pronta para receber as peças do backend (Email, Push, SMS, Popup).
+                Copie tudo e cole no Google Docs para o time de design montar os banners.
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -861,33 +868,45 @@ const Index = () => {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card className="rounded-3xl border-slate-200">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Email</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-slate-600">
-                      Assim que o backend estiver ligado, cada dia (ou sazonal) vai aparecer aqui.
-                    </p>
+              <Card className="rounded-3xl border-slate-200">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Copy (formato pronto para Docs)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-4">
+                    <pre className="max-h-[420px] whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800">
+                      {output?.copyAll?.trim().length
+                        ? output?.copyAll
+                        : "A copy vai aparecer aqui após a geração."}
+                    </pre>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      className="h-11 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700"
+                      onClick={() => copyToClipboard(output?.copyAll ?? "")}
+                      disabled={!output?.copyAll}
+                    >
+                      COPIAR TUDO
+                    </Button>
                     <Button
                       variant="secondary"
-                      className="w-full rounded-2xl"
+                      className="h-11 rounded-2xl"
                       onClick={() => copyToClipboard(JSON.stringify(lastPayload, null, 2))}
                     >
                       COPIAR INPUTS (DEBUG)
                     </Button>
-                  </CardContent>
-                </Card>
+                  </div>
+                </CardContent>
+              </Card>
 
+              <div className="grid gap-4 md:grid-cols-2">
                 <Card className="rounded-3xl border-slate-200">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Push • SMS • Popup</CardTitle>
+                    <CardTitle className="text-base">Ações</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <p className="text-sm text-slate-600">
-                      Copiar tudo, copiar por canal, voltar e editar e gerar novamente.
-                    </p>
+                    <p className="text-sm text-slate-600">Voltar, editar e gerar novamente.</p>
                     <div className="grid grid-cols-2 gap-2">
                       <Button
                         className="rounded-2xl bg-slate-900 text-white hover:bg-slate-800"
@@ -907,6 +926,17 @@ const Index = () => {
                         EDITAR
                       </Button>
                     </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-3xl border-slate-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Canais (próxima etapa)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-slate-600">
+                      Se você quiser, depois a gente separa a saída por Email/Push/SMS/Popup com botões de copiar por canal.
+                    </p>
                   </CardContent>
                 </Card>
               </div>
