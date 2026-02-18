@@ -487,12 +487,18 @@ serve(async (req) => {
         "Aplique fortemente os princípios e fundamentos do GUIA MESTRE, com foco na linguagem Las Vegas.",
         "NÃO use linguagem vulgar.",
         "NÃO inclua diagnóstico, explicações, metacomunicação ou textos fora do molde.",
-        "Tarefa: REESCREVER o TEMPLATE abaixo mantendo 100% do FORMATO do molde.",
-        "Regras de formato (obrigatórias):",
-        "- Preserve as mesmas linhas, headers, labels, ordem, separadores e emojis existentes no TEMPLATE.",
-        "- Não adicione nem remova seções.",
+        "Tarefa: REESCREVER o TEMPLATE abaixo mantendo o MODELO/FORMATO do molde.",
+        "",
+        "REGRAS DE FORMATO (obrigatórias):",
+        "- Preserve a estrutura: headers, labels (ex: 'Assunto:', 'Corpo:'), ordem das seções e separadores.",
+        "- Você pode ajustar/remover/adicionar LINHAS DENTRO de uma seção para refletir o BRIEFING (ex: lista de ofertas/valores e CTAs), mas NÃO crie seções novas.",
         "- Não mude nomes de seções (ex: 'Assunto:', 'Corpo:', 'SMS', 'Push', etc.).",
-        "- Só reescreva o conteúdo textual, adaptando ao briefing.",
+        "",
+        "REGRAS DE CONTEÚDO (críticas):",
+        "- Trate qualquer valor/benefício/CTA do TEMPLATE como EXEMPLO, e substitua pelos inputs do BRIEFING.",
+        "- NUNCA invente ofertas, valores, bônus, prazos ou CTAs que não estejam no briefing do dia.",
+        "- Se o briefing trouxer 1 CTA/oferta, a saída deve ter SOMENTE 1 CTA/oferta (não mantenha 3 opções do template).",
+        "",
         isDayChunk
           ? "- Este chunk é um DIA do funil: mantenha exatamente esse DIA e toda a estrutura interna."
           : "- Este chunk é o preâmbulo (popups + header): mantenha exatamente a estrutura.",
@@ -511,16 +517,17 @@ serve(async (req) => {
         isDayChunk
           ? [
               "BRIEFING DO DIA (inputs do operador para este dia):",
-              dayBrief || "(vazio) — mantenha a intenção do TEMPLATE, sem inventar valores novos.",
+              dayBrief || "(vazio) — se estiver vazio, reescreva de forma neutra SEM inventar valores novos.",
             ].join("\n")
           : [
               "BRIEFING (contexto geral do operador):",
               // Para preâmbulo, usamos o primeiro dia ativo como contexto.
-              (days.find((d) => d.active) ? (briefingByDay as any).byDay[(days.find((d) => d.active) as any).day] : "") ||
-                "(vazio)",
+              (days.find((d) => d.active)
+                ? (briefingByDay as any).byDay[(days.find((d) => d.active) as any).day]
+                : "") || "(vazio)",
             ].join("\n"),
         "",
-        "TEMPLATE PARA REESCREVER (mantenha o formato 1:1):",
+        "TEMPLATE PARA REESCREVER:",
         templateChunk,
         "",
         "SAÍDA: Retorne SOMENTE o texto reescrito deste TEMPLATE, sem comentários.",
