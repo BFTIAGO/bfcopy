@@ -498,6 +498,10 @@ serve(async (req) => {
         "- Trate qualquer valor/benefício/CTA do TEMPLATE como EXEMPLO, e substitua pelos inputs do BRIEFING.",
         "- NUNCA invente ofertas, valores, bônus, prazos ou CTAs que não estejam no briefing do dia.",
         "- Se o briefing trouxer 1 CTA/oferta, a saída deve ter SOMENTE 1 CTA/oferta (não mantenha 3 opções do template).",
+        "- Termos e Condições DEVEM estar coerentes com a oferta do BRIEFING:",
+        "  - Se o briefing NÃO especifica valores/regras (ex: depósitos e requisitos), NÃO cite números/valores.",
+        "  - Se o briefing especifica valores/condições, mencione SOMENTE os que existirem no briefing (não carregue valores do template).",
+        "  - Se o template tiver uma lista de T&C com múltiplos valores e o briefing tiver apenas 1 oferta, remova as linhas conflitantes e mantenha apenas o que for compatível.",
         "",
         isDayChunk
           ? "- Este chunk é um DIA do funil: mantenha exatamente esse DIA e toda a estrutura interna."
