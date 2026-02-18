@@ -258,6 +258,25 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Proteção simples por senha (para evitar acesso público/links vazados)
+  const expectedPassword = Deno.env.get("BETFUNNELS_APP_PASSWORD") ?? "";
+  if (!expectedPassword) {
+    console.error("[generate-copy] Missing BETFUNNELS_APP_PASSWORD secret");
+    return new Response(JSON.stringify({ error: "Senha do app não configurada." }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const providedPassword = req.headers.get("x-app-password") ?? "";
+  if (providedPassword !== expectedPassword) {
+    console.warn("[generate-copy] Unauthorized: invalid app password");
+    return new Response(JSON.stringify({ error: "Acesso negado. Senha inválida." }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const payload = (await req.json()) as Payload;
 

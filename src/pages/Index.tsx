@@ -32,6 +32,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { AccessGate } from "@/components/AccessGate";
 
 import { showError, showLoading, showSuccess, dismissToast } from "@/utils/toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -262,6 +263,13 @@ const Index = () => {
   const [lastPayload, setLastPayload] = useState<FormValues | null>(null);
   const [output, setOutput] = useState<SmarticoOutput | null>(null);
   const [repeatSourceByDay, setRepeatSourceByDay] = useState<Record<number, number>>({});
+  const [appPassword, setAppPassword] = useState<string>(() => {
+    try {
+      return localStorage.getItem("betfunnels_app_password") ?? "";
+    } catch {
+      return "";
+    }
+  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -331,6 +339,9 @@ const Index = () => {
     try {
       const { data, error } = await supabase.functions.invoke("generate-copy", {
         body: values,
+        headers: {
+          "x-app-password": appPassword,
+        },
       });
 
       if (error) throw error;
@@ -374,11 +385,9 @@ const Index = () => {
                   .join(" | ");
                 errMsg = `${errMsg}\nRefs: ${lines}`;
               }
-
             } catch {
               errMsg = raw;
             }
-
           }
         }
       } catch {
@@ -388,6 +397,22 @@ const Index = () => {
     } finally {
       dismissToast(toastId);
     }
+  }
+
+  // Gate simples de acesso
+  if (!appPassword) {
+    return (
+      <AccessGate
+        onUnlocked={(pwd) => {
+          setAppPassword(pwd);
+          try {
+            localStorage.setItem("betfunnels_app_password", pwd);
+          } catch {
+            // ignore
+          }
+        }}
+      />
+    );
   }
 
   function copyToClipboard(text: string) {
