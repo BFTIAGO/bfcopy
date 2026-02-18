@@ -30,6 +30,8 @@ import {
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
 import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 import { showError, showLoading, showSuccess, dismissToast } from "@/utils/toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -164,10 +166,6 @@ const formSchema = z
         }
       }
     } else {
-      // Funis multi-dia: pelo menos 1 dia precisa estar preenchido.
-      // Como validamos campos obrigatórios por dia, o ponto aqui é permitir que o operador
-      // deixe dias em branco SEM travar a geração — mas precisa haver ao menos 1 dia ativo.
-      // Vamos considerar ativo se o usuário tocou em qualquer campo: jogo, algum botão ou mensagem.
       const anyTouched = data.days.some((d) => {
         const game = (d.gameName ?? "").trim();
         const free = (d.freeMessage ?? "").trim();
@@ -180,6 +178,39 @@ const formSchema = z
           path: ["days"],
           message:
             "Preencha pelo menos 1 dia (Deposite, jogue e ganhe / Outro tipo de oferta) antes de gerar.",
+        });
+      }
+
+      const isFtdOrSemFtd =
+        data.funnelType === "Ativação FTD" ||
+        (data.funnelType === "Reativação" && data.reativacaoRegua === "Sem FTD");
+
+      if (isFtdOrSemFtd) {
+        const forbidden = /deposit/i; // deposite/depositar/depósito
+
+        data.days.forEach((d, dayIndex) => {
+          const btns = d.buttons ?? [];
+          btns.forEach((b, i) => {
+            const t = (b.text ?? "").trim();
+            if (t && forbidden.test(t)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["days", dayIndex, "buttons", i, "text"],
+                message:
+                  "Palavra proibida em FTD/SEM FTD. Tente: \"Coloca…\", \"Começa com…\", \"Banca…\", \"Jogue R$…\"",
+              });
+            }
+          });
+
+          const free = (d.freeMessage ?? "").trim();
+          if (free && forbidden.test(free)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["days", dayIndex, "freeMessage"],
+              message:
+                "Palavra proibida em FTD/SEM FTD. Tente: \"Coloca…\", \"Começa com…\", \"Banca…\", \"Jogue R$…\"",
+            });
+          }
         });
       }
     }
@@ -260,7 +291,16 @@ const Index = () => {
   const daysArray = useFieldArray({ control: form.control, name: "days" });
 
   const funnelType = form.watch("funnelType");
+  const reativacaoRegua = form.watch("reativacaoRegua");
   const includeUD = form.watch("sazonal.includeUpsellDownsell");
+
+  const isFtdOrSemFtd =
+    funnelType === "Ativação FTD" ||
+    (funnelType === "Reativação" && reativacaoRegua === "Sem FTD");
+
+  const offerExamplePlaceholder = isFtdOrSemFtd
+    ? "Ex: Jogue R$50 e ganhe 10 Giros Extras"
+    : "Ex: Deposite R$50, jogue R$50 e ganhe 10 Giros Extras";
 
   const headline = useMemo(() => {
     const map: Record<(typeof funnelTypes)[number], { title: string; subtitle: string }> = {
@@ -448,7 +488,6 @@ const Index = () => {
                               value={field.value}
                               onValueChange={(v) => {
                                 field.onChange(v);
-                                // Reset de régua quando sair de Reativação
                                 if (v !== "Reativação") form.setValue("reativacaoRegua", undefined);
                               }}
                             >
@@ -495,6 +534,19 @@ const Index = () => {
                         )}
                       />
                     </div>
+
+                    {(funnelType === "Ativação FTD" ||
+                      (funnelType === "Reativação" && reativacaoRegua === "Sem FTD")) && (
+                      <Alert className="rounded-3xl border-amber-200 bg-amber-50 text-amber-950">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle className="text-sm font-semibold">
+                          ATENÇÃO: FUNIL FTD e SEM FTD
+                        </AlertTitle>
+                        <AlertDescription className="text-sm text-amber-900">
+                          NÃO use "deposite" nas ofertas. Use: "Coloca", "Começa com", "Banca".
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
                     {funnelType === "Reativação" && (
                       <FormField
