@@ -489,6 +489,12 @@ serve(async (req) => {
         "NÃO inclua diagnóstico, explicações, metacomunicação ou textos fora do molde.",
         "Tarefa: REESCREVER o TEMPLATE abaixo mantendo o MODELO/FORMATO do molde.",
         "",
+        "REGRAS DE QUALIDADE (obrigatórias):",
+        "- EVITE REPETIÇÃO: não repita a mesma palavra-âncora (ex: 'forra') muitas vezes.",
+        "- Regra prática: use no máximo 1 ocorrência de 'forra' por peça (por Email/Push/SMS/Popup) e varie com sinônimos naturais quando precisar.",
+        "- Sinônimos/alternativas possíveis (use conforme contexto): 'o doce', 'o lucro', 'sacar', 'bater a meta', 'pegar o prêmio', 'rodar forte', 'entrar no jogo', 'fazer render'.",
+        "- Se a referência/template usar uma palavra repetida como parte do FORMATO/assinatura do cassino, mantenha; caso contrário, varie.",
+        "",
         "REGRAS DE FORMATO (obrigatórias):",
         "- Preserve a estrutura: headers, labels (ex: 'Assunto:', 'Corpo:'), ordem das seções e separadores.",
         "- Você pode ajustar/remover/adicionar LINHAS DENTRO de uma seção para refletir o BRIEFING (ex: lista de ofertas/valores e CTAs), mas NÃO crie seções novas.",
@@ -525,7 +531,6 @@ serve(async (req) => {
             ].join("\n")
           : [
               "BRIEFING (contexto geral do operador):",
-              // Para preâmbulo, usamos o primeiro dia ativo como contexto.
               (days.find((d) => d.active)
                 ? (briefingByDay as any).byDay[(days.find((d) => d.active) as any).day]
                 : "") || "(vazio)",
