@@ -230,6 +230,7 @@ const Index = () => {
   const [activeView, setActiveView] = useState<"form" | "output">("form");
   const [lastPayload, setLastPayload] = useState<FormValues | null>(null);
   const [output, setOutput] = useState<SmarticoOutput | null>(null);
+  const [repeatSourceByDay, setRepeatSourceByDay] = useState<Record<number, number>>({});
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -681,13 +682,15 @@ const Index = () => {
                             });
                           }
 
-                          const prevDayIndex = dayIndex - 1;
-                          const prevDayValues =
-                            prevDayIndex >= 0
-                              ? form.getValues(`days.${prevDayIndex}`)
+                          const sourceDayDefault = Math.max(1, dayIndex); // para Dia 2+, default é dia anterior
+                          const selectedSourceDay =
+                            repeatSourceByDay[dayIndex] ?? sourceDayDefault;
+                          const sourceValues =
+                            dayIndex > 0
+                              ? form.getValues(`days.${selectedSourceDay - 1}`)
                               : null;
-                          const canRepeatPrev =
-                            prevDayValues && dayHasContent(prevDayValues);
+                          const canRepeat =
+                            dayIndex > 0 && sourceValues && dayHasContent(sourceValues);
 
                           return (
                             <TabsContent
@@ -739,29 +742,69 @@ const Index = () => {
                               </div>
 
                               {dayIndex > 0 && (
-                                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <p className="text-sm text-slate-600">
-                                    Precisa repetir a mesma oferta?
-                                  </p>
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    className="h-10 rounded-2xl"
-                                    disabled={!canRepeatPrev}
-                                    onClick={() => {
-                                      if (!prevDayValues) return;
-                                      const cloned = JSON.parse(JSON.stringify(prevDayValues));
-                                      form.setValue(`days.${dayIndex}`, cloned, {
-                                        shouldDirty: true,
-                                        shouldValidate: true,
-                                      });
-                                      showSuccess(
-                                        `Oferta do Dia ${prevDayIndex + 1} repetida no Dia ${dayIndex + 1}.`,
-                                      );
-                                    }}
-                                  >
-                                    Repetir oferta do Dia {prevDayIndex + 1}
-                                  </Button>
+                                <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Repetir oferta
+                                      </p>
+                                      <p className="text-sm text-slate-600">
+                                        Copie os dados de um dia anterior para este dia.
+                                      </p>
+                                    </div>
+
+                                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                                      <Select
+                                        value={String(selectedSourceDay)}
+                                        onValueChange={(v) => {
+                                          const n = Number(v);
+                                          setRepeatSourceByDay((prev) => ({
+                                            ...prev,
+                                            [dayIndex]: n,
+                                          }));
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-10 w-full rounded-2xl border-slate-200 bg-white sm:w-[210px]">
+                                          <SelectValue placeholder="Escolha o dia" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-2xl">
+                                          {Array.from({ length: dayIndex }).map((_, i) => {
+                                            const sourceDay = i + 1;
+                                            const v = form.getValues(`days.${sourceDay - 1}`);
+                                            const ok = dayHasContent(v);
+                                            return (
+                                              <SelectItem
+                                                key={sourceDay}
+                                                value={String(sourceDay)}
+                                                disabled={!ok}
+                                              >
+                                                Dia {sourceDay}{!ok ? " (vazio)" : ""}
+                                              </SelectItem>
+                                            );
+                                          })}
+                                        </SelectContent>
+                                      </Select>
+
+                                      <Button
+                                        type="button"
+                                        className="h-10 w-full rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 sm:w-auto"
+                                        disabled={!canRepeat}
+                                        onClick={() => {
+                                          if (!sourceValues) return;
+                                          const cloned = JSON.parse(JSON.stringify(sourceValues));
+                                          form.setValue(`days.${dayIndex}`, cloned, {
+                                            shouldDirty: true,
+                                            shouldValidate: true,
+                                          });
+                                          showSuccess(
+                                            `Oferta do Dia ${selectedSourceDay} repetida no Dia ${dayIndex + 1}.`,
+                                          );
+                                        }}
+                                      >
+                                        Repetir
+                                      </Button>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
 
