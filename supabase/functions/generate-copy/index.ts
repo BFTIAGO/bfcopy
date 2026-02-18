@@ -73,8 +73,8 @@ function casinoNameCandidates(v: string) {
 function normalizeDays(payload: Payload) {
   const days = payload.days ?? [];
 
-  // Mantemos 5 dias no briefing (inputs do operador), mas o TEMPLATE pode ter mais dias.
-  return Array.from({ length: 5 }).map((_, i) => {
+  // Agora aceitamos até 6 dias de inputs do operador.
+  return Array.from({ length: 6 }).map((_, i) => {
     const d = days[i] ?? ({} as any);
     const gameName = (d.gameName ?? "").trim();
     const freeMessage = (d.freeMessage ?? "").trim();
@@ -93,6 +93,46 @@ function normalizeDays(payload: Payload) {
       active,
     };
   });
+}
+
+function buildBriefingByDay(payload: Payload) {
+  const sazonal = payload.sazonal ?? {};
+  if (payload.funnelType === "Sazonal") {
+    return {
+      sazonal: [
+        `JOGO: ${(sazonal.gameName ?? "").trim()}`,
+        `OFERTA: ${(sazonal.offerDescription ?? "").trim()}`,
+        sazonal.includeUpsellDownsell
+          ? `UPSELL: ${(sazonal.upsell ?? "").trim()}\nDOWNSELL: ${(sazonal.downsell ?? "").trim()}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    } as const;
+  }
+
+  const days = normalizeDays(payload);
+  const byDay: Record<number, string> = {};
+
+  for (const d of days) {
+    const parts = [
+      `TIPO_DE_OFERTA: ${d.type}`,
+      d.gameName ? `JOGO: ${d.gameName}` : "",
+      d.buttons?.length ? `BOTÕES/CTAs: ${d.buttons.join(" | ")}` : "",
+      d.freeMessage ? `MENSAGEM_BASE: ${d.freeMessage}` : "",
+    ].filter(Boolean);
+
+    byDay[d.day] = parts.join("\n").trim();
+  }
+
+  return { byDay } as const;
+}
+
+function dayNumberFromChunk(chunk: string) {
+  const m = chunk.match(/🔹\s*DIA\s*(\d+)/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
 }
 
 function buildBriefing(payload: Payload) {
@@ -409,7 +449,7 @@ serve(async (req) => {
     const sazonalActive = payload.funnelType === "Sazonal";
     const sazonal = payload.sazonal ?? {};
 
-    const briefing = buildBriefing(payload);
+    const briefingByDay = buildBriefingByDay(payload);
     const templateFull = references.join("\n\n---\n\n");
     const chunks = splitTemplateByDays(templateFull);
 
@@ -434,6 +474,12 @@ serve(async (req) => {
     for (let i = 0; i < chunks.length; i++) {
       const templateChunk = chunks[i];
       const isDayChunk = /^🔹\s*DIA\s*\d+/i.test(templateChunk);
+      const dayNumber = isDayChunk ? dayNumberFromChunk(templateChunk) : null;
+
+      const dayBrief =
+        !sazonalActive && dayNumber && (briefingByDay as any)?.byDay?.[dayNumber]
+          ? (briefingByDay as any).byDay[dayNumber]
+          : "";
 
       const rewritePrompt = [
         "Você é um redator CRM sênior.",
@@ -462,8 +508,17 @@ serve(async (req) => {
         "INSTRUÇÕES DO CASINO:",
         casinoInstruction,
         "",
-        "BRIEFING (inputs do operador):",
-        briefing,
+        isDayChunk
+          ? [
+              "BRIEFING DO DIA (inputs do operador para este dia):",
+              dayBrief || "(vazio) — mantenha a intenção do TEMPLATE, sem inventar valores novos.",
+            ].join("\n")
+          : [
+              "BRIEFING (contexto geral do operador):",
+              // Para preâmbulo, usamos o primeiro dia ativo como contexto.
+              (days.find((d) => d.active) ? (briefingByDay as any).byDay[(days.find((d) => d.active) as any).day] : "") ||
+                "(vazio)",
+            ].join("\n"),
         "",
         "TEMPLATE PARA REESCREVER (mantenha o formato 1:1):",
         templateChunk,

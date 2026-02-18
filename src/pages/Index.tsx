@@ -105,8 +105,9 @@ const formSchema = z
 
     days: z
       .array(daySchema)
-      .length(5)
+      .length(6)
       .default([
+        { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
         { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
         { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
         { mode: "A", buttonCount: 3, buttons: [{}, {}, {}] },
@@ -163,7 +164,7 @@ const formSchema = z
         }
       }
     } else {
-      // Funis 5 dias: pelo menos 1 dia precisa estar preenchido (MODO A ou B).
+      // Funis multi-dia: pelo menos 1 dia precisa estar preenchido.
       // Como validamos campos obrigatórios por dia, o ponto aqui é permitir que o operador
       // deixe dias em branco SEM travar a geração — mas precisa haver ao menos 1 dia ativo.
       // Vamos considerar ativo se o usuário tocou em qualquer campo: jogo, algum botão ou mensagem.
@@ -177,7 +178,8 @@ const formSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["days"],
-          message: "Preencha pelo menos 1 dia (Deposite, jogue e ganhe / Outro tipo de oferta) antes de gerar.",
+          message:
+            "Preencha pelo menos 1 dia (Deposite, jogue e ganhe / Outro tipo de oferta) antes de gerar.",
         });
       }
     }
@@ -236,6 +238,7 @@ const Index = () => {
       funnelType: "Ativação FTD",
       tier: "Tier 1",
       days: [
+        { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
         { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
         { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
         { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
@@ -637,7 +640,7 @@ const Index = () => {
                       <div className="flex items-end justify-between gap-3">
                         <div>
                           <h2 className="text-base font-semibold text-slate-900">
-                            Ofertas do funil (5 dias)
+                            Ofertas do funil (6 dias)
                           </h2>
                           <p className="text-sm text-slate-600">
                             Use 'Deposite, jogue e ganhe' (botões) ou 'Outro tipo de oferta' (texto livre) por dia.
@@ -647,13 +650,13 @@ const Index = () => {
                           variant="secondary"
                           className="rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50"
                         >
-                          DIA 1–5
+                          DIA 1–6
                         </Badge>
                       </div>
 
                       <Tabs defaultValue="day-1" className="w-full">
                         <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-3xl bg-slate-50 p-2">
-                          {Array.from({ length: 5 }).map((_, i) => (
+                          {Array.from({ length: 6 }).map((_, i) => (
                             <TabsTrigger
                               key={i}
                               value={`day-${i + 1}`}
