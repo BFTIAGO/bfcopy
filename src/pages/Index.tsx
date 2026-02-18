@@ -987,27 +987,27 @@ const Index = () => {
 
               <Card className="rounded-3xl border-slate-200">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Copy (formato pronto para Docs)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                    <pre className="max-h-[420px] whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800">
-                      {output?.copyAll?.trim().length
-                        ? output?.copyAll
-                        : "A copy vai aparecer aqui após a geração."}
-                    </pre>
-                  </div>
-
-                  <div className="grid gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <CardTitle className="text-base">Saída (copie e cole no Docs)</CardTitle>
                     <Button
-                      className="h-11 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700"
+                      className="h-10 rounded-2xl bg-indigo-600 px-4 text-white hover:bg-indigo-700"
                       onClick={() => copyToClipboard(output?.copyAll ?? "")}
                       disabled={!output?.copyAll}
                     >
                       COPIAR TUDO
                     </Button>
                   </div>
-
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Textarea
+                    value={output?.copyAll ?? ""}
+                    readOnly
+                    className="min-h-[520px] resize-y rounded-3xl border-slate-200 bg-white font-mono text-[13px] leading-relaxed text-slate-900 selection:bg-indigo-100 focus-visible:ring-indigo-600"
+                    placeholder="A copy vai aparecer aqui após a geração."
+                  />
+                  <p className="text-xs text-slate-500">
+                    Dica: você pode selecionar trechos e copiar, ou usar "Copiar tudo".
+                  </p>
                 </CardContent>
               </Card>
 
