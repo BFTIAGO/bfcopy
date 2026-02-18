@@ -1006,9 +1006,6 @@ const Index = () => {
                   <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Gerar copy</p>
-                      <p className="text-sm text-slate-600">
-                        Geração via IA (Gemini) usando guia mestre + tom de voz + referência do cassino.
-                      </p>
 
                     </div>
                     <Button
