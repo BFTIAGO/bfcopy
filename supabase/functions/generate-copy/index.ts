@@ -73,7 +73,8 @@ function casinoNameCandidates(v: string) {
 function normalizeDays(payload: Payload) {
   const days = payload.days ?? [];
 
-  const parsed = Array.from({ length: 5 }).map((_, i) => {
+  // Mantemos 5 dias no briefing (inputs do operador), mas o TEMPLATE pode ter mais dias.
+  return Array.from({ length: 5 }).map((_, i) => {
     const d = days[i] ?? ({} as any);
     const gameName = (d.gameName ?? "").trim();
     const freeMessage = (d.freeMessage ?? "").trim();
@@ -85,101 +86,73 @@ function normalizeDays(payload: Payload) {
 
     return {
       day: i + 1,
-      type:
-        d.mode === "A" ? "Deposite, jogue e ganhe" : "Outro tipo de oferta",
+      type: d.mode === "A" ? "Deposite, jogue e ganhe" : "Outro tipo de oferta",
       gameName,
       buttons,
       freeMessage,
       active,
     };
   });
+}
 
-  // Para garantir funil completo de 5 dias:
-  // se um dia estiver vazio, ele herda a oferta do último dia preenchido (fallback para Dia 1).
-  let lastActiveIndex = parsed.findIndex((d) => d.active);
-  if (lastActiveIndex === -1) {
-    // sem nenhum dia preenchido — o front deveria bloquear, mas mantemos seguro
-    return parsed.map((d) => ({ ...d, repeatOfDay: 1 }));
+function buildBriefing(payload: Payload) {
+  const sazonal = payload.sazonal ?? {};
+  if (payload.funnelType === "Sazonal") {
+    return [
+      `JOGO: ${(sazonal.gameName ?? "").trim()}`,
+      `OFERTA: ${(sazonal.offerDescription ?? "").trim()}`,
+      sazonal.includeUpsellDownsell
+        ? `UPSELL: ${(sazonal.upsell ?? "").trim()}\nDOWNSELL: ${(sazonal.downsell ?? "").trim()}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
-  const out: Array<{
-    day: number;
-    type: string;
-    gameName: string;
-    buttons: string[];
-    freeMessage: string;
-    repeatOfDay?: number;
-  }> = [];
+  const days = normalizeDays(payload);
+  const firstActive = days.find((d) => d.active) ?? days[0];
+  const parts = [
+    `TIPO_DE_OFERTA: ${firstActive.type}`,
+    firstActive.gameName ? `JOGO: ${firstActive.gameName}` : "",
+    firstActive.buttons?.length ? `BOTÕES/CTAs: ${firstActive.buttons.join(" | ")}` : "",
+    firstActive.freeMessage ? `MENSAGEM_BASE: ${firstActive.freeMessage}` : "",
+    "",
+    "(Observação: reescreva o TEMPLATE completo seguindo o molde da referência; adapte o texto para o briefing acima.)",
+  ].filter(Boolean);
 
-  let lastFilled = parsed[lastActiveIndex];
-  let lastFilledDay = parsed[lastActiveIndex].day;
+  return parts.join("\n");
+}
 
-  for (let i = 0; i < parsed.length; i++) {
-    const cur = parsed[i];
-    if (cur.active) {
-      out.push({
-        day: cur.day,
-        type: cur.type,
-        gameName: cur.gameName,
-        buttons: cur.buttons,
-        freeMessage: cur.freeMessage,
-      });
-      lastFilled = cur;
-      lastFilledDay = cur.day;
-      continue;
-    }
+function splitTemplateByDays(template: string) {
+  const t = (template ?? "").trim();
+  if (!t) return [] as string[];
 
-    // dia vazio -> repete último preenchido (ou dia 1 se nenhum anterior)
-    const fallback = i === 0 ? parsed[0] : lastFilled;
-    const fallbackDay = i === 0 ? 1 : lastFilledDay;
+  const re = /\n\s*🔹\s*DIA\s*\d+/gi;
+  const matches = Array.from(t.matchAll(re));
+  if (matches.length === 0) return [t];
 
-    out.push({
-      day: cur.day,
-      type: fallback.type,
-      gameName: fallback.gameName,
-      buttons: fallback.buttons,
-      freeMessage: fallback.freeMessage,
-      repeatOfDay: fallbackDay,
-    });
+  const indices = matches
+    .map((m) => m.index)
+    .filter((i): i is number => typeof i === "number")
+    .sort((a, b) => a - b);
+
+  const chunks: string[] = [];
+  // preâmbulo (popups + header do funil)
+  if (indices[0] > 0) chunks.push(t.slice(0, indices[0]).trim());
+
+  for (let i = 0; i < indices.length; i++) {
+    const start = indices[i];
+    const end = i + 1 < indices.length ? indices[i + 1] : t.length;
+    chunks.push(t.slice(start, end).trim());
   }
 
-  return out;
+  return chunks.filter(Boolean);
 }
 
-function hasFiveDays(text: string) {
-  const t = (text ?? "").toLowerCase();
-  return [1, 2, 3, 4, 5].every((n) => new RegExp(`\\bdia\\s*${n}\\b`, "i").test(t));
-}
-
-function stripMetaOnly(v: string) {
-  let out = v ?? "";
-  out = out
-    .split("\n")
-    .filter((line) => {
-      const l = line.trim().toLowerCase();
-      if (l.startsWith("diagnóstico:")) return false;
-      if (l.startsWith("diagnostico:")) return false;
-      if (l.startsWith("copy final:")) return false;
-      if (l === "copy final") return false;
-      return true;
-    })
-    .join("\n");
-
-  out = out.replace(/\n{3,}/g, "\n\n");
-  return out.trim();
-}
-
-function truncateAfterDay5(v: string) {
-  const s = v ?? "";
-  const m = s.match(/\bDIA\s*6\b/i);
-  if (!m || m.index == null) return s;
-  // corta no início da linha onde começa DIA 6
-  const idx = m.index;
-  const lineStart = s.lastIndexOf("\n", idx);
-  return s.slice(0, lineStart >= 0 ? lineStart : idx).trim();
-}
-
-async function callGeminiFlash(prompt: string) {
+async function callGeminiFlash(
+  prompt: string,
+  config?: { maxOutputTokens?: number; temperature?: number },
+) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) {
     console.error("[generate-copy] Missing GEMINI_API_KEY secret");
@@ -194,9 +167,9 @@ async function callGeminiFlash(prompt: string) {
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.5,
+        temperature: config?.temperature ?? 0.35,
         topP: 0.9,
-        maxOutputTokens: 16384,
+        maxOutputTokens: config?.maxOutputTokens ?? 8192,
       },
     }),
   });
@@ -222,9 +195,8 @@ async function callGeminiFlash(prompt: string) {
   return { ok: true, text: String(text) } as const;
 }
 
-function stripEmojisAndMeta(v: string) {
+function stripMetaOnly(v: string) {
   let out = v ?? "";
-  // Remove linhas de meta comuns
   out = out
     .split("\n")
     .filter((line) => {
@@ -232,21 +204,11 @@ function stripEmojisAndMeta(v: string) {
       if (l.startsWith("diagnóstico:")) return false;
       if (l.startsWith("diagnostico:")) return false;
       if (l.startsWith("copy final:")) return false;
-      if (l.startsWith("copy final")) return false;
+      if (l === "copy final") return false;
       return true;
     })
     .join("\n");
 
-  // Remove emojis / pictogramas
-  try {
-    out = out.replace(/[\p{Extended_Pictographic}]/gu, "");
-  } catch {
-    // fallback simples
-    out = out.replace(/[\u2190-\u21FF\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]+/g, "");
-  }
-
-  // Limpa espaços duplicados
-  out = out.replace(/[ \t]+/g, " ");
   out = out.replace(/\n{3,}/g, "\n\n");
   return out.trim();
 }
@@ -447,149 +409,90 @@ serve(async (req) => {
     const sazonalActive = payload.funnelType === "Sazonal";
     const sazonal = payload.sazonal ?? {};
 
-    const basePrompt = [
-      "Você é um redator CRM sênior.",
-      "Escreva APENAS em Português do Brasil (PT-BR) nativo.",
-      "NÃO use linguagem vulgar.",
-      "NÃO inclua diagnóstico, explicações, metacomunicação ou títulos do tipo 'Diagnóstico'/'Copy Final'.",
-      "A saída DEVE seguir fielmente o mesmo MODELO das referências (mesmas seções, labels, ordem, separadores e estilo).",
-      "Mantenha o mesmo padrão de EMOJIS do molde (se a referência usa emojis em títulos/labels, use os MESMOS; não invente emojis novos).",
-      "Não copie frases literalmente: reescreva mantendo a estrutura.",
-      "Respeite o guia mestre e o tom de voz do cassino.",
-      "Evite inventar valores específicos se não foram fornecidos.",
-      "Garanta que o texto fique completo (não pare no meio de uma frase/linha).",
-      "Se este for um funil de 5 dias, entregue obrigatoriamente DIA 1, DIA 2, DIA 3, DIA 4 e DIA 5 (não inclua DIA 6+).",
-      "",
-      `CASINO: ${casinoRow.nome_casino}`,
-      `TOM_DE_VOZ: ${casinoTone}`,
-      `TIER: ${payload.tier}`,
-      `FUNIL: ${payload.funnelType}${payload.reativacaoRegua ? ` (${payload.reativacaoRegua})` : ""}`,
-      "",
-      "GUIA MESTRE (obrigatório):",
-      masterPrompt,
-      "",
-      "INSTRUÇÕES DO CASINO:",
-      casinoInstruction,
-      "",
-      "REFERÊNCIA (use como TEMPLATE; mantenha a estrutura 1:1 e apenas substitua os trechos variáveis conforme entradas):",
-      references.join("\n\n---\n\n"),
-      "",
-      "ENTRADAS DO OPERADOR:",
-      sazonalActive
-        ? [
-            `JOGO: ${(sazonal.gameName ?? "").trim()}`,
-            `OFERTA: ${(sazonal.offerDescription ?? "").trim()}`,
-            (sazonal.includeUpsellDownsell
-              ? `UPSELL: ${(sazonal.upsell ?? "").trim()}\nDOWNSELL: ${(sazonal.downsell ?? "").trim()}`
-              : ""),
-          ]
-            .filter(Boolean)
-            .join("\n")
-        : days
-            .map((d) => {
-              const parts = [
-                `DIA ${d.day}`,
-                d.repeatOfDay ? `REPETIR_OFERTA_DO_DIA: ${d.repeatOfDay}` : "",
-                `TIPO: ${d.type}`,
-                d.gameName ? `JOGO: ${d.gameName}` : "",
-                d.buttons?.length ? `BOTÕES/CTAs: ${d.buttons.join(" | ")}` : "",
-                d.freeMessage ? `MENSAGEM_BASE: ${d.freeMessage}` : "",
-              ].filter(Boolean);
-              return parts.join("\n");
-            })
-            .join("\n\n"),
-      "",
-      "SAÍDA:",
-      "Retorne SOMENTE a copy final no formato da referência, sem nenhum texto fora do molde.",
-    ].join("\n");
+    const briefing = buildBriefing(payload);
+    const templateFull = references.join("\n\n---\n\n");
+    const chunks = splitTemplateByDays(templateFull);
 
-    console.log("[generate-copy] Generating", {
-      casino: payload.casino,
-      funnel: payload.funnelType,
-      tier: payload.tier,
-      refsUsed: refKeys,
-      days: sazonalActive ? "sazonal" : days.map((d) => d.day),
-    });
-
-    // 1) Geração
-    const gen1 = await callGeminiFlash(basePrompt);
-    if (!gen1.ok) {
-      return new Response(JSON.stringify({ error: gen1.error }), {
-        status: 500,
+    if (!chunks.length) {
+      console.error("[generate-copy] Empty template after split", { refKeys });
+      return new Response(JSON.stringify({ error: "Referência vazia/inválida." }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 2) Revisão para forçar aderência ao molde (reduz deriva e truncamentos)
-    const reviewPrompt = [
-      "Você é um revisor de copy CRM extremamente rígido.",
-      "Objetivo: ajustar o texto para ficar 100% aderente ao MODELO/FORMATO da REFERÊNCIA.",
-      "Regras:",
-      "- PT-BR nativo.",
-      "- Não use linguagem vulgar.",
-      "- Não escreva diagnósticos, comentários ou explicações.",
-      "- Preserve exatamente a estrutura da referência: mesmas seções, mesma ordem, mesmos labels, separadores e padrão de emojis.",
-      "- Se algo estiver faltando, complete.",
-      "- Para funil de 5 dias, garantir DIA 1..DIA 5 (não incluir DIA 6+).",
-      "- Entregue SOMENTE a copy final.",
-      "",
-      "REFERÊNCIA:",
-      references.join("\n\n---\n\n"),
-      "",
-      "RASCUNHO:",
-      gen1.text,
-    ].join("\n");
+    console.log("[generate-copy] Rewriting template", {
+      casino: payload.casino,
+      matchedCasino: casinoRow.nome_casino,
+      funnel: payload.funnelType,
+      tier: payload.tier,
+      chunks: chunks.length,
+      daysBriefed: sazonalActive ? "sazonal" : days.filter((d) => d.active).map((d) => d.day),
+    });
 
-    const gen2 = await callGeminiFlash(reviewPrompt);
-    let finalText = stripMetaOnly((gen2.ok ? gen2.text : gen1.text) ?? "");
-    finalText = truncateAfterDay5(finalText);
+    const rewrittenChunks: string[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const templateChunk = chunks[i];
+      const isDayChunk = /^🔹\s*DIA\s*\d+/i.test(templateChunk);
 
-    // 3) Se ainda não vier 5 dias, pedir complemento (sem alterar o que já está certo)
-    if (!sazonalActive && !hasFiveDays(finalText)) {
-      console.warn("[generate-copy] Missing days in output, requesting completion", {
-        casino: payload.casino,
-        funnel: payload.funnelType,
-      });
-      const completionPrompt = [
-        "Você é um revisor de copy CRM extremamente rígido.",
-        "O texto abaixo está INCOMPLETO (faltam dias do funil).",
-        "Tarefa: entregar o funil COMPLETO de 5 dias (DIA 1..DIA 5) no exato molde da referência.",
-        "Regras:",
-        "- Não use linguagem vulgar.",
-        "- Preserve o padrão de emojis e headers da referência (não invente novos).",
-        "- Não escreva diagnósticos nem comentários.",
-        "- Preserve o que já está bom e complete o que falta.",
-        "- NÃO inclua DIA 6+.",
-        "- Entregue SOMENTE a copy final.",
+      const rewritePrompt = [
+        "Você é um redator CRM sênior.",
+        "Escreva APENAS em Português do Brasil (PT-BR) nativo.",
+        "Aplique fortemente os princípios e fundamentos do GUIA MESTRE, com foco na linguagem Las Vegas.",
+        "NÃO use linguagem vulgar.",
+        "NÃO inclua diagnóstico, explicações, metacomunicação ou textos fora do molde.",
+        "Tarefa: REESCREVER o TEMPLATE abaixo mantendo 100% do FORMATO do molde.",
+        "Regras de formato (obrigatórias):",
+        "- Preserve as mesmas linhas, headers, labels, ordem, separadores e emojis existentes no TEMPLATE.",
+        "- Não adicione nem remova seções.",
+        "- Não mude nomes de seções (ex: 'Assunto:', 'Corpo:', 'SMS', 'Push', etc.).",
+        "- Só reescreva o conteúdo textual, adaptando ao briefing.",
+        isDayChunk
+          ? "- Este chunk é um DIA do funil: mantenha exatamente esse DIA e toda a estrutura interna."
+          : "- Este chunk é o preâmbulo (popups + header): mantenha exatamente a estrutura.",
         "",
-        "REFERÊNCIA:",
-        references.join("\n\n---\n\n"),
+        `CASINO: ${casinoRow.nome_casino}`,
+        `TOM_DE_VOZ: ${casinoTone}`,
+        `TIER: ${payload.tier}`,
+        `FUNIL: ${payload.funnelType}${payload.reativacaoRegua ? ` (${payload.reativacaoRegua})` : ""}`,
         "",
-        "TEXTO ATUAL:",
-        finalText,
+        "GUIA MESTRE:",
+        masterPrompt,
         "",
-        "ENTRADAS DO OPERADOR (5 dias):",
-        days
-          .map((d) => {
-            const parts = [
-              `DIA ${d.day}`,
-              d.repeatOfDay ? `REPETIR_OFERTA_DO_DIA: ${d.repeatOfDay}` : "",
-              `TIPO: ${d.type}`,
-              d.gameName ? `JOGO: ${d.gameName}` : "",
-              d.buttons?.length ? `BOTÕES/CTAs: ${d.buttons.join(" | ")}` : "",
-              d.freeMessage ? `MENSAGEM_BASE: ${d.freeMessage}` : "",
-            ].filter(Boolean);
-            return parts.join("\n");
-          })
-          .join("\n\n"),
+        "INSTRUÇÕES DO CASINO:",
+        casinoInstruction,
+        "",
+        "BRIEFING (inputs do operador):",
+        briefing,
+        "",
+        "TEMPLATE PARA REESCREVER (mantenha o formato 1:1):",
+        templateChunk,
+        "",
+        "SAÍDA: Retorne SOMENTE o texto reescrito deste TEMPLATE, sem comentários.",
       ].join("\n");
 
-      const gen3 = await callGeminiFlash(completionPrompt);
-      if (gen3.ok) {
-        finalText = stripMetaOnly(gen3.text);
-        finalText = truncateAfterDay5(finalText);
+      const gen = await callGeminiFlash(rewritePrompt, {
+        maxOutputTokens: 8192,
+        temperature: 0.35,
+      });
+
+      if (!gen.ok) {
+        console.error("[generate-copy] Chunk generation failed", { i, error: gen.error });
+        return new Response(
+          JSON.stringify({
+            error: `Falha ao gerar (chunk ${i + 1}/${chunks.length}).`,
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
+
+      rewrittenChunks.push(stripMetaOnly(gen.text));
     }
+
+    const finalText = rewrittenChunks.join("\n\n").trim();
 
     return new Response(JSON.stringify({ copyAll: finalText }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
