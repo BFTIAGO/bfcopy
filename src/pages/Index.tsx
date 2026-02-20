@@ -299,27 +299,7 @@ const Index = () => {
     ? "Ex: Jogue R$50 e ganhe 10 Giros Extras"
     : "Ex: Deposite R$50, jogue R$50 e ganhe 10 Giros Extras";
 
-  const headline = useMemo(() => {
-    const map: Record<(typeof funnelTypes)[number], { title: string; subtitle: string }> = {
-      "Ativação FTD": {
-        title: "Betfunnels Copy",
-        subtitle: "Ativação (boas-vindas) • 5 dias • pronto pra CTRL+C/CTRL+V",
-      },
-      "Ativação STD / TTD / 4TD+": {
-        title: "Betfunnels Copy",
-        subtitle: "Ativação (depósitos seguintes) • 5 dias • foco em conversão",
-      },
-      Reativação: {
-        title: "Betfunnels Copy",
-        subtitle: "Reativação • 5 dias • resgate de jogador offline/dormente",
-      },
-      Sazonal: {
-        title: "Betfunnels Copy",
-        subtitle: "Sazonal • 1 dia • campanha relâmpago para 3+ depósitos",
-      },
-    };
-    return map[funnelType];
-  }, [funnelType]);
+  const headlineTitle = "Betfunnels Copy";
 
   async function handleGenerate(values: FormValues) {
     setLastPayload(values);
@@ -427,9 +407,8 @@ const Index = () => {
             </Badge>
           </div>
           <h1 className="text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            {headline.title}
+            {headlineTitle}
           </h1>
-          <p className="text-pretty text-slate-600">{headline.subtitle}</p>
         </div>
 
         {activeView === "form" ? (
