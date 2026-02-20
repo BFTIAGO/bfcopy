@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 import { AccessGate } from "@/components/AccessGate";
+import { CasinoCombobox } from "@/components/CasinoCombobox";
 
 import { showError, showLoading, showSuccess, dismissToast } from "@/utils/toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -473,20 +474,15 @@ const Index = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-slate-700">Seleção do cassino</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <FormControl>
-                              <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white">
-                                <SelectValue placeholder="Selecione" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="rounded-2xl">
-                              {casinos.map((c) => (
-                                <SelectItem key={c} value={c}>
-                                  {c}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <FormControl>
+                            <CasinoCombobox
+                              value={field.value}
+                              onChange={field.onChange}
+                              options={casinos}
+                              label="Selecione um cassino"
+                              placeholder="Digite para buscar…"
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
