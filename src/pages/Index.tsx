@@ -413,12 +413,7 @@ const Index = () => {
 
         {activeView === "form" ? (
           <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
-            <CardHeader className="space-y-2">
-              <CardTitle className="text-xl font-semibold text-slate-900">
-                Configuração
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-8">
+            <CardContent className="space-y-8 pt-6">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleGenerate)} className="space-y-8">
                   {/* BLOCO 1 */}
@@ -457,11 +452,6 @@ const Index = () => {
 
                   {/* BLOCO 2 */}
                   <section className="space-y-4">
-                    <div>
-                      <h2 className="text-base font-semibold text-slate-900">Funil</h2>
-                      <p className="text-sm text-slate-600">Obrigatório</p>
-                    </div>
-
                     <div className="grid gap-4 md:grid-cols-2">
                       <FormField
                         control={form.control}
