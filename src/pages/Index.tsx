@@ -275,7 +275,7 @@ const Index = () => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      casino: "b1bet",
+      casino: undefined,
       funnelType: "Ativação FTD",
       tier: "Tier 1",
       days: [
