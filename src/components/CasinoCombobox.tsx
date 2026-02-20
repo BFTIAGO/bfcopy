@@ -11,6 +11,8 @@ type Props<T extends string> = {
   placeholder?: string;
 };
 
+const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+
 /**
  * Campo de busca + lista de sugestões (sem dropdown/popover).
  * Só mostra opções DEPOIS de digitar.
@@ -47,7 +49,17 @@ export function CasinoCombobox<T extends string>({
       try {
         const res = await onSearch(normalizedQuery);
         if (!active) return;
-        setOptions(res);
+
+        // Garante lista sem duplicatas considerando maiúsculas/minúsculas.
+        const seen = new Set<string>();
+        const uniq = res.filter((o) => {
+          const k = norm(o);
+          if (!k || seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+
+        setOptions(uniq);
       } finally {
         if (active) setLoading(false);
       }
@@ -69,9 +81,11 @@ export function CasinoCombobox<T extends string>({
           value={query}
           placeholder={placeholder}
           onChange={(e) => {
-            // Se o operador começar a digitar, limpa a seleção anterior.
-            if (value) onChange(undefined);
-            setQuery(e.target.value);
+            const next = e.target.value;
+            // Se o operador começar a digitar e NÃO for só diferença de maiúscula/minúscula,
+            // limpamos a seleção anterior.
+            if (value && norm(value) !== norm(next)) onChange(undefined);
+            setQuery(next);
           }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -94,7 +108,7 @@ export function CasinoCombobox<T extends string>({
             ) : null}
 
             {options.map((opt) => {
-              const selected = value === opt;
+              const selected = norm(value) === norm(opt);
               return (
                 <button
                   key={String(opt)}
