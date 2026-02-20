@@ -2,55 +2,64 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { Check, Search } from "lucide-react";
+import { Check, Loader2, Search } from "lucide-react";
 
 type Props<T extends string> = {
   value?: T;
-  onChange: (value: T) => void;
-  options: readonly T[];
+  onChange: (value: T | undefined) => void;
+  onSearch: (query: string) => Promise<readonly T[]>;
   placeholder?: string;
 };
 
 /**
  * Campo de busca + lista de sugestões (sem dropdown/popover).
- * O operador digita, vê os cassinos filtrados e clica para selecionar.
+ * Só mostra opções DEPOIS de digitar.
+ * A seleção acontece ao clicar na sugestão.
  */
 export function CasinoCombobox<T extends string>({
   value,
   onChange,
-  options,
-  placeholder = "Digite o nome do cassino…",
+  onSearch,
+  placeholder = "Informe o nome do cassino…",
 }: Props<T>) {
   const [query, setQuery] = React.useState<string>(value ? String(value) : "");
   const [focused, setFocused] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [options, setOptions] = React.useState<readonly T[]>([]);
 
   React.useEffect(() => {
-    // Mantém o input refletindo a seleção atual.
-    setQuery(value ? String(value) : "");
+    // Quando selecionar um cassino, o input espelha.
+    if (value) setQuery(String(value));
   }, [value]);
 
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = query.trim();
 
-  const filtered = React.useMemo(() => {
-    const list = options
-      .filter((o) => {
-        if (!normalizedQuery) return true;
-        return o.toLowerCase().includes(normalizedQuery);
-      })
-      .sort((a, b) => {
-        if (!normalizedQuery) return a.localeCompare(b);
-        const aStarts = a.toLowerCase().startsWith(normalizedQuery);
-        const bStarts = b.toLowerCase().startsWith(normalizedQuery);
-        if (aStarts && !bStarts) return -1;
-        if (!aStarts && bStarts) return 1;
-        return a.localeCompare(b);
-      })
-      .slice(0, 10);
+  // Debounce simples para evitar spam.
+  React.useEffect(() => {
+    let active = true;
+    const t = window.setTimeout(async () => {
+      if (!focused) return;
+      if (!normalizedQuery) {
+        setOptions([]);
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await onSearch(normalizedQuery);
+        if (!active) return;
+        setOptions(res);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, 180);
 
-    return list;
-  }, [options, normalizedQuery]);
+    return () => {
+      active = false;
+      window.clearTimeout(t);
+    };
+  }, [focused, normalizedQuery, onSearch]);
 
-  const showSuggestions = focused && filtered.length > 0;
+  const showSuggestions = focused && normalizedQuery.length > 0;
 
   return (
     <div className="relative">
@@ -59,25 +68,36 @@ export function CasinoCombobox<T extends string>({
         <Input
           value={query}
           placeholder={placeholder}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            // Se o operador começar a digitar, limpa a seleção anterior.
+            if (value) onChange(undefined);
+            setQuery(e.target.value);
+          }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           className={cn(
-            "h-11 rounded-2xl border-slate-200 bg-white pl-10 text-slate-900 shadow-sm",
+            "h-11 rounded-2xl border-slate-200 bg-white pl-10 pr-10 text-slate-900 shadow-sm",
             "placeholder:text-slate-400",
             "focus-visible:ring-2 focus-visible:ring-indigo-200 focus-visible:ring-offset-0",
           )}
         />
+        {loading ? (
+          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
+        ) : null}
       </div>
 
       {showSuggestions ? (
         <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
           <div className="max-h-64 overflow-auto p-1">
-            {filtered.map((opt) => {
+            {options.length === 0 && !loading ? (
+              <div className="px-3 py-3 text-sm text-slate-600">Nenhum cassino encontrado.</div>
+            ) : null}
+
+            {options.map((opt) => {
               const selected = value === opt;
               return (
                 <button
-                  key={opt}
+                  key={String(opt)}
                   type="button"
                   onMouseDown={(e) => {
                     // evita blur antes de selecionar
@@ -85,7 +105,7 @@ export function CasinoCombobox<T extends string>({
                   }}
                   onClick={() => {
                     onChange(opt);
-                    setQuery(opt);
+                    setQuery(String(opt));
                     setFocused(false);
                   }}
                   className={cn(
@@ -95,7 +115,7 @@ export function CasinoCombobox<T extends string>({
                       : "text-slate-900 hover:bg-slate-50",
                   )}
                 >
-                  <span className="truncate">{opt}</span>
+                  <span className="truncate">{String(opt)}</span>
                   {selected ? (
                     <Check className="ml-auto h-4 w-4 text-indigo-600" />
                   ) : null}

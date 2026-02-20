@@ -38,18 +38,6 @@ import { CasinoCombobox } from "@/components/CasinoCombobox";
 import { showError, showLoading, showSuccess, dismissToast } from "@/utils/toast";
 import { supabase } from "@/integrations/supabase/client";
 
-const casinos = [
-  "4play",
-  "4win",
-  "b1bet",
-  "betfalcons",
-  "betgorillas",
-  "betvip",
-  "ginga-bet",
-  "lider-bet",
-  "pagol",
-] as const;
-
 const funnelTypes = [
   "Ativação FTD",
   "Ativação STD / TTD / 4TD+",
@@ -102,7 +90,7 @@ const daySchema = z
 
 const formSchema = z
   .object({
-    casino: z.enum(casinos),
+    casino: z.string().min(1, "Informe o nome do cassino."),
     funnelType: z.enum(funnelTypes),
     reativacaoRegua: z.enum(reativacaoReguas).optional(),
     tier: z.enum(tiers),
@@ -275,7 +263,7 @@ const Index = () => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      casino: undefined,
+      casino: "",
       funnelType: "Ativação FTD",
       tier: "Tier 1",
       days: [
@@ -476,10 +464,20 @@ const Index = () => {
                           <FormLabel className="text-slate-700">Seleção do cassino</FormLabel>
                           <FormControl>
                             <CasinoCombobox
-                              value={field.value}
-                              onChange={field.onChange}
-                              options={casinos}
-                              placeholder="Digite para buscar…"
+                              value={(field.value || undefined) as any}
+                              onChange={(v) => field.onChange(v ?? "")}
+                              onSearch={async (q) => {
+                                const { data, error } = await supabase.functions.invoke(
+                                  "search-casinos",
+                                  {
+                                    body: { query: q },
+                                    headers: { "x-app-password": appPassword },
+                                  },
+                                );
+                                if (error) throw error;
+                                return (data?.options ?? []) as string[];
+                              }}
+                              placeholder="Informe o nome do cassino…"
                             />
                           </FormControl>
                           <FormMessage />
