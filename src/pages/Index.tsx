@@ -302,19 +302,19 @@ const Index = () => {
   const headline = useMemo(() => {
     const map: Record<(typeof funnelTypes)[number], { title: string; subtitle: string }> = {
       "Ativação FTD": {
-        title: "Gerador de Copy CRM – Smartico",
+        title: "Betfunnels Copy",
         subtitle: "Ativação (boas-vindas) • 5 dias • pronto pra CTRL+C/CTRL+V",
       },
       "Ativação STD / TTD / 4TD+": {
-        title: "Gerador de Copy CRM – Smartico",
+        title: "Betfunnels Copy",
         subtitle: "Ativação (depósitos seguintes) • 5 dias • foco em conversão",
       },
       Reativação: {
-        title: "Gerador de Copy CRM – Smartico",
+        title: "Betfunnels Copy",
         subtitle: "Reativação • 5 dias • resgate de jogador offline/dormente",
       },
       Sazonal: {
-        title: "Gerador de Copy CRM – Smartico",
+        title: "Betfunnels Copy",
         subtitle: "Sazonal • 1 dia • campanha relâmpago para 3+ depósitos",
       },
     };
@@ -438,30 +438,18 @@ const Index = () => {
               <CardTitle className="text-xl font-semibold text-slate-900">
                 Configuração
               </CardTitle>
-              <p className="text-sm text-slate-600">
-                Preencha o cassino, funil e ofertas. A UI valida tudo antes de liberar a geração.
-              </p>
             </CardHeader>
             <CardContent className="space-y-8">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleGenerate)} className="space-y-8">
                   {/* BLOCO 1 */}
-                  <section className="space-y-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-base font-semibold text-slate-900">
-                          Cassino
-                        </h2>
-                        <p className="text-sm text-slate-600">Obrigatório</p>
-                      </div>
-                    </div>
-
+                  <section className="space-y-3">
                     <FormField
                       control={form.control}
                       name="casino"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-slate-700">Seleção do cassino</FormLabel>
+                          <FormLabel className="text-slate-700">Informe o nome do cassino</FormLabel>
                           <FormControl>
                             <CasinoCombobox
                               value={(field.value || undefined) as any}
