@@ -1,101 +1,110 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Check, Search } from "lucide-react";
 
 type Props<T extends string> = {
   value?: T;
   onChange: (value: T) => void;
   options: readonly T[];
   placeholder?: string;
-  label?: string;
-  disabled?: boolean;
 };
 
+/**
+ * Campo de busca + lista de sugestões (sem dropdown/popover).
+ * O operador digita, vê os cassinos filtrados e clica para selecionar.
+ */
 export function CasinoCombobox<T extends string>({
   value,
   onChange,
   options,
-  placeholder = "Buscar cassino…",
-  label = "Selecione",
-  disabled,
+  placeholder = "Digite o nome do cassino…",
 }: Props<T>) {
-  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState<string>(value ? String(value) : "");
+  const [focused, setFocused] = React.useState(false);
 
-  const selected = value ? String(value) : "";
+  React.useEffect(() => {
+    // Mantém o input refletindo a seleção atual.
+    setQuery(value ? String(value) : "");
+  }, [value]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const filtered = React.useMemo(() => {
+    const list = options
+      .filter((o) => {
+        if (!normalizedQuery) return true;
+        return o.toLowerCase().includes(normalizedQuery);
+      })
+      .sort((a, b) => {
+        if (!normalizedQuery) return a.localeCompare(b);
+        const aStarts = a.toLowerCase().startsWith(normalizedQuery);
+        const bStarts = b.toLowerCase().startsWith(normalizedQuery);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, 10);
+
+    return list;
+  }, [options, normalizedQuery]);
+
+  const showSuggestions = focused && filtered.length > 0;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled}
+    <div className="relative">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <Input
+          value={query}
+          placeholder={placeholder}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           className={cn(
-            "h-11 w-full justify-between rounded-2xl border-slate-200 bg-white px-4 text-left text-slate-900 shadow-sm",
-            "hover:bg-slate-50",
+            "h-11 rounded-2xl border-slate-200 bg-white pl-10 text-slate-900 shadow-sm",
+            "placeholder:text-slate-400",
             "focus-visible:ring-2 focus-visible:ring-indigo-200 focus-visible:ring-offset-0",
-            !selected && "text-slate-500",
           )}
-        >
-          <span className="truncate">{selected || label}</span>
-          <ChevronDown className="h-4 w-4 text-slate-500" />
-        </Button>
-      </PopoverTrigger>
+        />
+      </div>
 
-      <PopoverContent
-        align="start"
-        className="w-[--radix-popover-trigger-width] rounded-2xl border-slate-200 bg-white p-0 shadow-lg"
-      >
-        <Command className="rounded-2xl">
-          <div className="flex items-center gap-2 border-b border-slate-100 px-3">
-            <Search className="h-4 w-4 text-slate-500" />
-            <CommandInput
-              placeholder={placeholder}
-              className="h-11 border-0 text-slate-900 placeholder:text-slate-400"
-            />
+      {showSuggestions ? (
+        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+          <div className="max-h-64 overflow-auto p-1">
+            {filtered.map((opt) => {
+              const selected = value === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onMouseDown={(e) => {
+                    // evita blur antes de selecionar
+                    e.preventDefault();
+                  }}
+                  onClick={() => {
+                    onChange(opt);
+                    setQuery(opt);
+                    setFocused(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm",
+                    selected
+                      ? "bg-indigo-50 text-slate-900"
+                      : "text-slate-900 hover:bg-slate-50",
+                  )}
+                >
+                  <span className="truncate">{opt}</span>
+                  {selected ? (
+                    <Check className="ml-auto h-4 w-4 text-indigo-600" />
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
-          <CommandList className="max-h-72">
-            <CommandEmpty className="py-8 text-sm text-slate-600">
-              Nenhum cassino encontrado.
-            </CommandEmpty>
-            <CommandGroup className="p-2">
-              {options.map((opt) => {
-                const isSelected = selected === opt;
-                return (
-                  <CommandItem
-                    key={opt}
-                    value={opt}
-                    onSelect={() => {
-                      onChange(opt);
-                      setOpen(false);
-                    }}
-                    className={cn(
-                      "rounded-xl px-3 py-2 text-slate-900",
-                      "data-[selected=true]:bg-indigo-50 data-[selected=true]:text-slate-900",
-                    )}
-                  >
-                    <span className="truncate">{opt}</span>
-                    {isSelected ? (
-                      <Check className="ml-auto h-4 w-4 text-indigo-600" />
-                    ) : null}
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+        </div>
+      ) : null}
+    </div>
   );
 }

@@ -479,7 +479,6 @@ const Index = () => {
                               value={field.value}
                               onChange={field.onChange}
                               options={casinos}
-                              label="Selecione um cassino"
                               placeholder="Digite para buscar…"
                             />
                           </FormControl>
