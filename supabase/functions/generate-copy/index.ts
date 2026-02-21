@@ -130,15 +130,15 @@ function buildBriefingByDay(payload: Payload) {
 }
 
 function dayNumberFromChunk(chunk: string) {
-  const m = chunk.match(/(?:🔹|🔸)?\s*DIA\s*(\d+)/i);
+  const m = chunk.match(/(?:🔹|🔸|📅)?\s*DIA\s*(\d+)/i);
   if (!m) return null;
   const n = Number(m[1]);
   return Number.isFinite(n) ? n : null;
 }
 
 function extractTemplateDays(template: string) {
-  // Aceita variações de marcador: 🔹, 🔸 ou sem emoji, desde que seja início de linha.
-  const re = /(?:^|\n)\s*(?:🔹|🔸)?\s*DIA\s*(\d+)/gi;
+  // Aceita variações de marcador: 🔹, 🔸, 📅 ou sem emoji, desde que seja início de linha.
+  const re = /(?:^|\n)\s*(?:🔹|🔸|📅)?\s*DIA\s*(\d+)/gi;
   const matches = Array.from((template ?? "").matchAll(re));
   const found = new Set<number>();
   for (const m of matches) {
@@ -153,8 +153,8 @@ function splitTemplateByDays(template: string) {
   if (!t) return [] as string[];
 
   // Robusto: encontra marcadores mesmo no início do texto.
-  // Aceita: "🔹 DIA 1", "🔸 DIA 1" ou "DIA 1".
-  const re = /(?:^|\n)\s*(?:🔹|🔸)?\s*DIA\s*\d+/gi;
+  // Aceita: "🔹 DIA 1", "🔸 DIA 1", "📅 DIA 1" ou "DIA 1".
+  const re = /(?:^|\n)\s*(?:🔹|🔸|📅)?\s*DIA\s*\d+/gi;
   const matches = Array.from(t.matchAll(re));
   if (matches.length === 0) return [t];
 
@@ -512,7 +512,7 @@ serve(async (req) => {
     const rewrittenChunks: string[] = [];
     for (let i = 0; i < chunks.length; i++) {
       const templateChunk = chunks[i];
-      const isDayChunk = /^(?:🔹|🔸)?\s*DIA\s*\d+/i.test(templateChunk);
+      const isDayChunk = /^(?:🔹|🔸|📅)?\s*DIA\s*\d+/i.test(templateChunk);
       const dayNumber = isDayChunk ? dayNumberFromChunk(templateChunk) : null;
 
       const dayBrief =
