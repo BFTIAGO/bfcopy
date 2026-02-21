@@ -130,45 +130,31 @@ function buildBriefingByDay(payload: Payload) {
 }
 
 function dayNumberFromChunk(chunk: string) {
-  const m = chunk.match(/🔹\s*DIA\s*(\d+)/i);
+  const m = chunk.match(/(?:🔹|🔸)?\s*DIA\s*(\d+)/i);
   if (!m) return null;
   const n = Number(m[1]);
   return Number.isFinite(n) ? n : null;
 }
 
-function buildBriefing(payload: Payload) {
-  const sazonal = payload.sazonal ?? {};
-  if (payload.funnelType === "Sazonal") {
-    return [
-      `JOGO: ${(sazonal.gameName ?? "").trim()}`,
-      `OFERTA: ${(sazonal.offerDescription ?? "").trim()}`,
-      sazonal.includeUpsellDownsell
-        ? `UPSELL: ${(sazonal.upsell ?? "").trim()}\nDOWNSELL: ${(sazonal.downsell ?? "").trim()}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+function extractTemplateDays(template: string) {
+  // Aceita variações de marcador: 🔹, 🔸 ou sem emoji, desde que seja início de linha.
+  const re = /(?:^|\n)\s*(?:🔹|🔸)?\s*DIA\s*(\d+)/gi;
+  const matches = Array.from((template ?? "").matchAll(re));
+  const found = new Set<number>();
+  for (const m of matches) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n)) found.add(n);
   }
-
-  const days = normalizeDays(payload);
-  const firstActive = days.find((d) => d.active) ?? days[0];
-  const parts = [
-    `TIPO_DE_OFERTA: ${firstActive.type}`,
-    firstActive.gameName ? `JOGO: ${firstActive.gameName}` : "",
-    firstActive.buttons?.length ? `BOTÕES/CTAs: ${firstActive.buttons.join(" | ")}` : "",
-    firstActive.freeMessage ? `MENSAGEM_BASE: ${firstActive.freeMessage}` : "",
-    "",
-    "(Observação: reescreva o TEMPLATE completo seguindo o molde da referência; adapte o texto para o briefing acima.)",
-  ].filter(Boolean);
-
-  return parts.join("\n");
+  return Array.from(found).sort((a, b) => a - b);
 }
 
 function splitTemplateByDays(template: string) {
   const t = (template ?? "").trim();
   if (!t) return [] as string[];
 
-  const re = /\n\s*🔹\s*DIA\s*\d+/gi;
+  // Robusto: encontra marcadores mesmo no início do texto.
+  // Aceita: "🔹 DIA 1", "🔸 DIA 1" ou "DIA 1".
+  const re = /(?:^|\n)\s*(?:🔹|🔸)?\s*DIA\s*\d+/gi;
   const matches = Array.from(t.matchAll(re));
   if (matches.length === 0) return [t];
 
@@ -471,6 +457,38 @@ serve(async (req) => {
 
     const briefingByDay = buildBriefingByDay(payload);
     const templateFull = references.join("\n\n---\n\n");
+
+    // Se o funil não for Sazonal, esperamos um molde com 6 dias.
+    if (payload.funnelType !== "Sazonal") {
+      const foundDays = extractTemplateDays(templateFull);
+      const expectedDays = [1, 2, 3, 4, 5, 6];
+      const missingDays = expectedDays.filter((d) => !foundDays.includes(d));
+
+      if (missingDays.length) {
+        console.warn("[generate-copy] Template missing day markers", {
+          casino: payload.casino,
+          matchedCasino: casinoRow.nome_casino,
+          funnel: payload.funnelType,
+          reativacaoRegua: payload.reativacaoRegua,
+          foundDays,
+          missingDays,
+        });
+
+        return new Response(
+          JSON.stringify({
+            error:
+              "Referência incompleta: faltam marcadores de DIA no template (🔹 DIA N). Atualize a referência do cassino.",
+            foundDays,
+            missingDays,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    }
+
     const chunks = splitTemplateByDays(templateFull);
 
     if (!chunks.length) {
@@ -487,13 +505,14 @@ serve(async (req) => {
       funnel: payload.funnelType,
       tier: payload.tier,
       chunks: chunks.length,
+      templateDaysFound: payload.funnelType === "Sazonal" ? [] : extractTemplateDays(templateFull),
       daysBriefed: sazonalActive ? "sazonal" : days.filter((d) => d.active).map((d) => d.day),
     });
 
     const rewrittenChunks: string[] = [];
     for (let i = 0; i < chunks.length; i++) {
       const templateChunk = chunks[i];
-      const isDayChunk = /^🔹\s*DIA\s*\d+/i.test(templateChunk);
+      const isDayChunk = /^(?:🔹|🔸)?\s*DIA\s*\d+/i.test(templateChunk);
       const dayNumber = isDayChunk ? dayNumberFromChunk(templateChunk) : null;
 
       const dayBrief =
@@ -580,7 +599,18 @@ serve(async (req) => {
         );
       }
 
-      rewrittenChunks.push(stripMetaOnly(gen.text));
+      let out = stripMetaOnly(gen.text);
+
+      // Correção de segurança: o modelo às vezes devolve o chunk sem o cabeçalho "🔹 DIA N".
+      // Forçamos a primeira linha do template no output para não "sumir" dia.
+      if (isDayChunk) {
+        const headerLine = (templateChunk.split("\n")[0] ?? "").trim();
+        if (headerLine && !out.trimStart().startsWith(headerLine)) {
+          out = [headerLine, out].filter(Boolean).join("\n").trim();
+        }
+      }
+
+      rewrittenChunks.push(out);
     }
 
     const finalText = rewrittenChunks.join("\n\n").trim();

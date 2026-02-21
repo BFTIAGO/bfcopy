@@ -338,6 +338,12 @@ const Index = () => {
               if (parsed?.missingRefKeys?.length) {
                 errMsg = `${errMsg} (faltando: ${parsed.missingRefKeys.join(", ")})`;
               }
+              if (parsed?.missingDays?.length) {
+                errMsg = `${errMsg}\nFaltando dias no template: ${parsed.missingDays.join(", ")}`;
+              }
+              if (parsed?.foundDays?.length) {
+                errMsg = `${errMsg}\nDias encontrados: ${parsed.foundDays.join(", ")}`;
+              }
               if (parsed?.casino) {
                 errMsg = `${errMsg} (selecionado: ${parsed.casino})`;
               }
