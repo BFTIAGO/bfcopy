@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { extractTermsBlock, replaceTermsBlock } from "../_shared/tc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -515,6 +516,9 @@ serve(async (req) => {
       const isDayChunk = /^(?:🔹|🔸|📅)?\s*DIA\s*\d+/i.test(templateChunk);
       const dayNumber = isDayChunk ? dayNumberFromChunk(templateChunk) : null;
 
+      // Guarda T&C original do template (se existir) para manter idêntico no output.
+      const templateTc = extractTermsBlock(`\n${templateChunk}`)?.block ?? null;
+
       const dayBrief =
         !sazonalActive && dayNumber && (briefingByDay as any)?.byDay?.[dayNumber]
           ? (briefingByDay as any).byDay[dayNumber]
@@ -543,10 +547,9 @@ serve(async (req) => {
         "- Trate qualquer valor/benefício/CTA do TEMPLATE como EXEMPLO, e substitua pelos inputs do BRIEFING.",
         "- NUNCA invente ofertas, valores, bônus, prazos ou CTAs que não estejam no briefing do dia.",
         "- Se o briefing trouxer 1 CTA/oferta, a saída deve ter SOMENTE 1 CTA/oferta (não mantenha 3 opções do template).",
-        "- Termos e Condições DEVEM estar coerentes com a oferta do BRIEFING:",
-        "  - Se o briefing NÃO especifica valores/regras (ex: depósitos e requisitos), NÃO cite números/valores.",
-        "  - Se o briefing especifica valores/condições, mencione SOMENTE os que existirem no briefing (não carregue valores do template).",
-        "  - Se o template tiver uma lista de T&C com múltiplos valores e o briefing tiver apenas 1 oferta, remova as linhas conflitantes e mantenha apenas o que for compatível.",
+        "- Termos e Condições (T&C) devem ser preservados: NÃO apague, NÃO resuma e NÃO varie o texto dentro do bloco 'Termos e Condições:' do template.",
+        "- Anti-repetição NÃO se aplica em T&C.",
+        "- Só ajuste números/valores no T&C se o BRIEFING trouxer números diferentes e isso for necessário para coerência; caso contrário, mantenha o T&C exatamente como na referência.",
         "",
         isDayChunk
           ? "- Este chunk é um DIA do funil: mantenha exatamente esse DIA e toda a estrutura interna."
@@ -601,13 +604,17 @@ serve(async (req) => {
 
       let out = stripMetaOnly(gen.text);
 
-      // Correção de segurança: o modelo às vezes devolve o chunk sem o cabeçalho "🔹 DIA N".
-      // Forçamos a primeira linha do template no output para não "sumir" dia.
+      // Correção de segurança: o modelo às vezes devolve o chunk sem o cabeçalho.
       if (isDayChunk) {
         const headerLine = (templateChunk.split("\n")[0] ?? "").trim();
         if (headerLine && !out.trimStart().startsWith(headerLine)) {
           out = [headerLine, out].filter(Boolean).join("\n").trim();
         }
+      }
+
+      // Correção de compliance: T&C deve ficar idêntico ao template.
+      if (templateTc) {
+        out = replaceTermsBlock(out, templateTc);
       }
 
       rewrittenChunks.push(out);
