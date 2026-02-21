@@ -265,6 +265,7 @@ const Index = () => {
     defaultValues: {
       casino: "",
       funnelType: "Ativação FTD",
+      reativacaoRegua: undefined,
       tier: "Tier 1",
       days: [
         { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
@@ -284,6 +285,16 @@ const Index = () => {
     },
     mode: "onChange",
   });
+
+  function handleInvalidSubmit() {
+    showError("Revise os campos obrigatórios antes de gerar.");
+    const errs = form.formState.errors as any;
+    if (errs?.casino) return form.setFocus("casino");
+    if (errs?.funnelType) return form.setFocus("funnelType");
+    if (errs?.tier) return form.setFocus("tier");
+    if (errs?.reativacaoRegua) return form.setFocus("reativacaoRegua" as any);
+    if (errs?.days) return form.setFocus("days" as any);
+  }
 
   const daysArray = useFieldArray({ control: form.control, name: "days" });
 
@@ -421,7 +432,10 @@ const Index = () => {
           <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
             <CardContent className="space-y-8 pt-6">
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleGenerate)} className="space-y-8">
+                <form
+                  onSubmit={form.handleSubmit(handleGenerate, handleInvalidSubmit)}
+                  className="space-y-8"
+                >
                   {/* BLOCO 1 */}
                   <section className="space-y-3">
                     <FormField
@@ -536,7 +550,10 @@ const Index = () => {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="text-slate-700">Régua de reativação</FormLabel>
-                            <Select value={field.value} onValueChange={field.onChange}>
+                            <Select
+                              value={(field.value ?? "") as any}
+                              onValueChange={(v) => field.onChange(v || undefined)}
+                            >
                               <FormControl>
                                 <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white">
                                   <SelectValue placeholder="Selecione" />
