@@ -47,7 +47,7 @@ const funnelTypes = [
 
 const reativacaoReguas = ["Sem FTD", "Sem Depósito", "Sem Login"] as const;
 
-const tiers = ["Tier 1", "Tier 2", "Tier 3"] as const;
+// REMOVIDO: Tier (não usado)
 
 const daySchema = z
   .object({
@@ -93,7 +93,6 @@ const formSchema = z
     casino: z.string().min(1, "Informe o nome do cassino."),
     funnelType: z.enum(funnelTypes),
     reativacaoRegua: z.enum(reativacaoReguas).optional(),
-    tier: z.enum(tiers),
 
     days: z
       .array(daySchema)
@@ -211,7 +210,6 @@ type FormValues = z.infer<typeof formSchema>;
 type SmarticoOutput = {
   funnel: string;
   casino: string;
-  tier: string;
   reativacaoRegua?: string;
   copyAll?: string;
   // Depois o backend vai devolver as peças. Mantemos flexível.
@@ -266,7 +264,6 @@ const Index = () => {
       casino: "",
       funnelType: "Ativação FTD",
       reativacaoRegua: undefined,
-      tier: "Tier 1",
       days: [
         { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
         { mode: "A", gameName: "", buttonCount: 3, buttons: [{}, {}, {}], freeMessage: "" },
@@ -291,7 +288,6 @@ const Index = () => {
     const errs = form.formState.errors as any;
     if (errs?.casino) return form.setFocus("casino");
     if (errs?.funnelType) return form.setFocus("funnelType");
-    if (errs?.tier) return form.setFocus("tier");
     if (errs?.reativacaoRegua) return form.setFocus("reativacaoRegua" as any);
     if (errs?.days) return form.setFocus("days" as any);
   }
@@ -329,7 +325,6 @@ const Index = () => {
       setOutput({
         funnel: values.funnelType,
         casino: values.casino,
-        tier: values.tier,
         reativacaoRegua: values.reativacaoRegua,
         copyAll: data?.copyAll ?? "",
       });
@@ -472,7 +467,7 @@ const Index = () => {
 
                   {/* BLOCO 2 */}
                   <section className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-1">
                       <FormField
                         control={form.control}
                         name="funnelType"
@@ -495,31 +490,6 @@ const Index = () => {
                                 {funnelTypes.map((f) => (
                                   <SelectItem key={f} value={f}>
                                     {f}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="tier"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-700">Tier do jogador</FormLabel>
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <FormControl>
-                                <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white">
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent className="rounded-2xl">
-                                {tiers.map((t) => (
-                                  <SelectItem key={t} value={t}>
-                                    {t}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -1015,12 +985,7 @@ const Index = () => {
                   >
                     {output?.funnel}
                   </Badge>
-                  <Badge
-                    variant="secondary"
-                    className="rounded-full bg-amber-50 text-amber-800 hover:bg-amber-50"
-                  >
-                    {output?.tier}
-                  </Badge>
+                  {/* REMOVIDO: Tier */}
                   {output?.reativacaoRegua && (
                     <Badge
                       variant="secondary"

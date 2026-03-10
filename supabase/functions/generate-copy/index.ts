@@ -17,7 +17,6 @@ type FunnelType =
 type Payload = {
   casino: string;
   funnelType: FunnelType;
-  tier: string;
   reativacaoRegua?: string;
   days?: Array<{
     mode: "A" | "B";
@@ -504,7 +503,6 @@ serve(async (req) => {
       casino: payload.casino,
       matchedCasino: casinoRow.nome_casino,
       funnel: payload.funnelType,
-      tier: payload.tier,
       chunks: chunks.length,
       templateDaysFound: payload.funnelType === "Sazonal" ? [] : extractTemplateDays(templateFull),
       daysBriefed: sazonalActive ? "sazonal" : days.filter((d) => d.active).map((d) => d.day),
@@ -557,7 +555,6 @@ serve(async (req) => {
         "",
         `CASINO: ${casinoRow.nome_casino}`,
         `TOM_DE_VOZ: ${casinoTone}`,
-        `TIER: ${payload.tier}`,
         `FUNIL: ${payload.funnelType}${payload.reativacaoRegua ? ` (${payload.reativacaoRegua})` : ""}`,
         "",
         "GUIA MESTRE:",
